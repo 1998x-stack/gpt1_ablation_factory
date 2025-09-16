@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable
 
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
@@ -11,11 +10,10 @@ from tokenizers.pre_tokenizers import Whitespace
 
 
 class BPEBuilder:
-    """训练与加载 BPE 分词器（兼容 GPT 风格）。
+    """训练与加载 BPE 分词器（兼容 GPT 风格，含 <pad>）。
 
-    中文注释：
-        - 训练时使用 Whitespace 预分词，适合英文/空格分隔的语料。
-        - 若需要中文，可替换为更合适的预分词器或先做切词。
+    - 首次运行若找不到已训练分词器，会自动训练并保存到 save_dir/bpe.json
+    - 特殊符号：<pad>, <unk>, <s>, </s>, <sep>
     """
 
     def __init__(self, save_dir: str | Path, vocab_size: int = 40000, min_freq: int = 2) -> None:
@@ -25,17 +23,26 @@ class BPEBuilder:
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self.tokenizer_path = self.save_dir / "bpe.json"
 
-    def train(self, iterator: Iterable[str]) -> Tokenizer:
-        tokenizer = Tokenizer(BPE(unk_token="<unk>"))
-        tokenizer.pre_tokenizer = Whitespace()
-        trainer = BpeTrainer(vocab_size=self.vocab_size, min_frequency=self.min_freq, special_tokens=[
-            "<unk>", "<s>", "</s>", "<sep>"
-        ])
-        tokenizer.train_from_iterator(iterator, trainer=trainer)
-        tokenizer.save(str(self.tokenizer_path))
-        return tokenizer
+    def _special_tokens(self) -> list[str]:
+        return ["<pad>", "<unk>", "<s>", "</s>", "<sep>"]
 
-    def load(self) -> Tokenizer:
-        if not self.tokenizer_path.exists():
-            raise FileNotFoundError(f"Tokenizer not found: {self.tokenizer_path}")
-        return Tokenizer.from_file(str(self.tokenizer_path))
+    def train(self, iterator: Iterable[str]) -> Tokenizer:
+        tok = Tokenizer(BPE(unk_token="<unk>"))
+        tok.pre_tokenizer = Whitespace()
+        trainer = BpeTrainer(
+            vocab_size=self.vocab_size,
+            min_frequency=self.min_freq,
+            special_tokens=self._special_tokens(),
+        )
+        tok.train_from_iterator(iterator, trainer=trainer)
+        tok.save(str(self.tokenizer_path))
+        return tok
+
+    def load_or_train(self, iterator_if_needed: Iterable[str] | None = None) -> Tokenizer:
+        if self.tokenizer_path.exists():
+            return Tokenizer.from_file(str(self.tokenizer_path))
+        if iterator_if_needed is None:
+            raise FileNotFoundError(
+                f"Tokenizer not found: {self.tokenizer_path}. Provide iterator_if_needed to train."
+            )
+        return self.train(iterator_if_needed)

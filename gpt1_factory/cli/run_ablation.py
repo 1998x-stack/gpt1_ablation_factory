@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
-from pathlib import Path
 from typing import Any, Dict, List
 
 import yaml
@@ -22,8 +20,9 @@ def main():
     args = parser.parse_args()
 
     cfg = load_cfg(args.cfg)
-    abls = cfg.get("ablations", [])
+    abls: List[Dict[str, Any]] = cfg.get("ablations", [])
     results = []
+
     for abl in abls:
         name = abl["name"]
         finetune_cfg = abl["finetune_cfg"]
@@ -31,7 +30,8 @@ def main():
         overrides = abl.get("overrides", {})
         ov_list = [f"{k}={v}" for k, v in overrides.items()]
         if model_cfg:
-            ov_list.append(f"include+=configs/model/lstm_baseline.yaml")
+            # 借助 include+= 将 model 覆盖文件注入 finetune 配置
+            ov_list.append(f"include+={model_cfg}")
         logger.info(f"[ablation] running {name}")
         cmd = [sys.executable, "-m", "gpt1_factory.cli.finetune", "--cfg", finetune_cfg] + ov_list
         subprocess.run(cmd, check=True)
