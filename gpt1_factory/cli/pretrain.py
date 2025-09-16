@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import yaml
-import torch
-from torch.utils.data import DataLoader
 from loguru import logger
+from torch.utils.data import DataLoader
 
 from ..configs import ExpConfig, OptimConfig, DataConfig, ModelConfig, CheckpointConfig, dataclass_from_dict
 from ..utils.logging import setup_loguru
@@ -18,16 +16,18 @@ from ..data import load_dataset_factory
 from ..trainers.pretrain_trainer import PretrainTrainer
 
 
-def load_cfg(path: str) -> Dict[str, Any]:
+def _load_yaml(path: str) -> Dict[str, Any]:
     with open(path, "r") as f:
-        cfg = yaml.safe_load(f)
-    # 处理 include
-    if "include" in cfg:
-        for p in cfg["include"]:
-            with open(p, "r") as fi:
-                inc = yaml.safe_load(fi)
-                cfg.update(inc)
-    return cfg
+        return yaml.safe_load(f)
+
+
+def _apply_includes(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    incs = cfg.pop("include", []) or []
+    merged: Dict[str, Any] = {}
+    for p in incs:
+        merged.update(_load_yaml(p))
+    merged.update(cfg)
+    return merged
 
 
 def main():
@@ -35,7 +35,9 @@ def main():
     parser.add_argument("--cfg", type=str, required=True)
     args = parser.parse_args()
 
-    cfg = load_cfg(args.cfg)
+    # include -> merge first
+    cfg = _apply_includes(_load_yaml(args.cfg))
+
     exp = dataclass_from_dict(ExpConfig, cfg.get("exp", {}))
     optim_cfg = dataclass_from_dict(OptimConfig, cfg.get("optim", {}))
     data_cfg = dataclass_from_dict(DataConfig, cfg.get("data", {}))
@@ -48,16 +50,22 @@ def main():
 
     # 数据
     bundle = load_dataset_factory(data_cfg)
-    train_loader = DataLoader(bundle.train, batch_size=data_cfg.batch_size, shuffle=True,
-                              num_workers=data_cfg.num_workers, collate_fn=bundle.collator, drop_last=True)
+    train_loader = DataLoader(
+        bundle.train,
+        batch_size=data_cfg.batch_size,
+        shuffle=True,
+        num_workers=data_cfg.num_workers,
+        collate_fn=bundle.collator,
+        drop_last=True,
+    )
 
-    # 模型
-    model = MODELS.create(model_cfg.name, **model_cfg.__dict__)
+    # 模型（去掉 name 这个键，避免 Registry.create 重复参数）
+    model_kwargs = {k: v for k, v in model_cfg.__dict__.items() if k != "name"}
+    model = MODELS.create(model_cfg.name, **model_kwargs)
 
     # 训练
     trainer = PretrainTrainer(exp, optim_cfg, model, train_loader, out_dir=exp.out_dir, amp=optim_cfg.amp)
-    trainer.train(save_every=cfg.get("checkpoint", {}).get("save_every", 10000),
-                  keep_last=cfg.get("checkpoint", {}).get("keep_last", 5))
+    trainer.train(save_every=ckpt_cfg.save_every, keep_last=ckpt_cfg.keep_last)
 
 
 if __name__ == "__main__":

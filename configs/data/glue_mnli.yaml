@@ -1,6 +1,7 @@
+# e.g. configs/data/glue_mnli.yaml
 data:
   name: glue
   task: "mnli"
   max_len: 256
   batch_size: 32
-  num_workers: 4
+  num_workers: 2   # was 4

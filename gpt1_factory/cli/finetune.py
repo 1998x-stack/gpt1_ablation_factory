@@ -21,25 +21,17 @@ def _load_yaml(path: str) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def _apply_includes(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """处理 include: [path1, path2, ...]，按顺序覆盖合并。"""
-    incs = cfg.pop("include", []) or []
-    merged = {}
-    for p in incs:
-        merged.update(_load_yaml(p))
-    merged.update(cfg)
-    return merged
-
-
 def _override_cfg(cfg: Dict[str, Any], kvs: List[str]) -> Dict[str, Any]:
-    """支持 k.v=... 以及 include+=path.yaml 追加 include。"""
+    """支持 a.b=c / include+=path.yaml。先记录 include+=，稍后合并。"""
     includes_append: List[str] = []
     for kv in kvs:
         if "=" not in kv:
             continue
         k, v = kv.split("=", 1)
-        if k.strip() == "include+" or k.strip() == "include+=":
-            includes_append.append(v.strip())
+        k = k.strip()
+        v = v.strip()
+        if k in ("include+", "include+="):
+            includes_append.append(v)
             continue
 
         cur = cfg
@@ -58,17 +50,25 @@ def _override_cfg(cfg: Dict[str, Any], kvs: List[str]) -> Dict[str, Any]:
                 val = v
         cur[parts[-1]] = val
 
-    # 重新组合 include
     if includes_append:
         base_includes = cfg.get("include", []) or []
         cfg["include"] = base_includes + includes_append
     return cfg
 
 
+def _apply_includes(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    incs = cfg.pop("include", []) or []
+    merged: Dict[str, Any] = {}
+    for p in incs:
+        merged.update(_load_yaml(p))
+    merged.update(cfg)
+    return merged
+
+
 def load_cfg_with_overrides(path: str, overrides: List[str]) -> Dict[str, Any]:
     cfg = _load_yaml(path)
-    cfg = _override_cfg(cfg, overrides)
-    cfg = _apply_includes(cfg)
+    cfg = _override_cfg(cfg, overrides)   # 先接收 include+= 与键值覆盖
+    cfg = _apply_includes(cfg)            # 再实际合并 include
     return cfg
 
 
@@ -99,9 +99,13 @@ def main():
         num_workers=data_cfg.num_workers, collate_fn=bundle.collator
     )
 
-    backbone = MODELS.create(model_cfg.name, **model_cfg.__dict__)
+    # 模型（去掉 name 以避免 Registry.create(name=..., name=...) 冲突）
+    model_kwargs = {k: v for k, v in model_cfg.__dict__.items() if k != "name"}
+    backbone = MODELS.create(model_cfg.name, **model_kwargs)
+
     trainer = FinetuneTrainer(
-        exp, ft_cfg, backbone, bundle.num_labels or 2, train_loader, valid_loader, task_name=data_cfg.task or data_cfg.name
+        exp, ft_cfg, backbone, bundle.num_labels or 2, train_loader, valid_loader,
+        task_name=data_cfg.task or data_cfg.name
     )
     best, detail = trainer.train()
     logger.info(f"Best metric: {best:.4f} detail: {detail}")
