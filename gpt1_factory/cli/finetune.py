@@ -22,7 +22,6 @@ def _load_yaml(path: str) -> Dict[str, Any]:
 
 
 def _override_cfg(cfg: Dict[str, Any], kvs: List[str]) -> Dict[str, Any]:
-    """Support a.b=c and include+=path.yaml before applying includes."""
     includes_append: List[str] = []
     for kv in kvs:
         if "=" not in kv:
@@ -32,7 +31,6 @@ def _override_cfg(cfg: Dict[str, Any], kvs: List[str]) -> Dict[str, Any]:
         if k in ("include+", "include+="):
             includes_append.append(v)
             continue
-
         cur = cfg
         parts = k.split(".")
         for p in parts[:-1]:
@@ -47,7 +45,6 @@ def _override_cfg(cfg: Dict[str, Any], kvs: List[str]) -> Dict[str, Any]:
             except ValueError:
                 val = v
         cur[parts[-1]] = val
-
     if includes_append:
         base_includes = cfg.get("include", []) or []
         cfg["include"] = base_includes + includes_append
@@ -64,12 +61,14 @@ def _apply_includes(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _ensure_finetune_data_defaults(cfg: Dict[str, Any]) -> None:
-    """If user passes only `data.task=...`, ensure other fields exist."""
     d = cfg.setdefault("data", {})
     d.setdefault("name", "glue")
     d.setdefault("batch_size", 32)
     d.setdefault("num_workers", 2)
     d.setdefault("max_len", 256)
+    d.setdefault("cache_dir", str(Path("gpt1_ablation_factory/data/hf_cache").resolve()))
+    d.setdefault("export_dir", str(Path("gpt1_ablation_factory/data/exports").resolve()))
+    d.setdefault("local_text_dir", str(Path("gpt1_ablation_factory/data/text").resolve()))
 
 
 def load_cfg_with_overrides(path: str, overrides: List[str]) -> Dict[str, Any]:

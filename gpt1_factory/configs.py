@@ -72,6 +72,9 @@ class DataConfig:
     task: Optional[str] = None
     text_column: Optional[str] = None
     bpe: Optional[Dict[str, Any]] = None
+    cache_dir: Optional[str] = None
+    local_text_dir: Optional[str] = None
+    export_dir: Optional[str] = None
 
 
 @dataclass

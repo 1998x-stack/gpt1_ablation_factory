@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Iterable, List
+from typing import Any, Optional, Tuple, Iterable, List
 import os
 from glob import glob
+from pathlib import Path
 
 import datasets
 from torch.utils.data import Dataset
@@ -25,7 +26,6 @@ class DatasetBundle:
 
 
 def _text_iter(ds, cols: Tuple[str, str | None] | None = None) -> Iterable[str]:
-    """从数据集中提取用于 BPE 训练的文本迭代器。"""
     if ds is None:
         return []
     if cols is None:
@@ -39,56 +39,42 @@ def _text_iter(ds, cols: Tuple[str, str | None] | None = None) -> Iterable[str]:
             yield f"{t1}\n{t2}"
 
 
-def _load_books_like_split() -> datasets.Dataset:
-    """
-    在新版本 datasets 中，脚本式 community dataset 会被禁用。
-    我们做一个‘多级回退’：
-      1) 标准 hub path（新风格地址）
-      2) OpenWebText（近似书籍/长文本）
-      3) WikiText-103 raw（官方维护）
-      4) 本地文本目录（环境变量 BOOKS_TEXT_DIR 下的 *.txt）
-    """
-    # 1) 尝试 hub path（新风格地址）
+def _load_books_like_split(cfg: DataConfig) -> datasets.Dataset:
+    """Try several long-text corpora and local .txt — always using cache_dir."""
+    cache_dir = cfg.cache_dir
+    # Prefer local text if available
+    if cfg.local_text_dir and Path(cfg.local_text_dir).exists():
+        files = glob(os.path.join(cfg.local_text_dir, "**/*.txt"), recursive=True)
+        if files:
+            return datasets.load_dataset("text", data_files={"train": files}, cache_dir=cache_dir)["train"]
+
+    # Hub paths (no scripts)
     try:
-        # 某些镜像将数据托管为 parquet/arrow，无需执行脚本
-        return datasets.load_dataset("hf://datasets/bookcorpusopen/bookcorpusopen", split="train")
+        return datasets.load_dataset("hf://datasets/bookcorpusopen/bookcorpusopen", split="train", cache_dir=cache_dir)
     except Exception:
         pass
 
-    # 2) OpenWebText（Skylion007/openwebtext）
     for cand in ("Skylion007/openwebtext", "hf://datasets/Skylion007/openwebtext"):
         try:
-            return datasets.load_dataset(cand, split="train")
+            return datasets.load_dataset(cand, split="train", cache_dir=cache_dir)
         except Exception:
             continue
 
-    # 3) WikiText（官方）
-    for cfg in ("wikitext-103-raw-v1", "wikitext-2-raw-v1"):
-        for cand in ("wikitext", f"hf://datasets/wikitext/{cfg}"):
-            try:
-                return datasets.load_dataset("wikitext", cfg, split="train")
-            except Exception:
-                continue
+    for cfg_name in ("wikitext-103-raw-v1", "wikitext-2-raw-v1"):
+        try:
+            return datasets.load_dataset("wikitext", cfg_name, split="train", cache_dir=cache_dir)
+        except Exception:
+            continue
 
-    # 4) 本地文本目录
-    local_dir = os.environ.get("BOOKS_TEXT_DIR", "").strip()
-    if local_dir:
-        files = glob(os.path.join(local_dir, "**/*.txt"), recursive=True)
-        if not files:
-            raise FileNotFoundError(f"BOOKS_TEXT_DIR={local_dir} 下未找到 *.txt")
-        return datasets.load_dataset("text", data_files={"train": files})["train"]
-
-    # 实在不行，退到 AG News 作为占位（可运行）
-    return datasets.load_dataset("ag_news", split="train")
+    return datasets.load_dataset("ag_news", split="train", cache_dir=cache_dir)
 
 
 @DATASETS.register("bookcorpusopen")
 def load_bookcorpusopen(cfg: DataConfig) -> DatasetBundle:
-    # 新版 datasets 不再支持远程脚本，走回退加载
     try:
-        raw = datasets.load_dataset("bookcorpusopen", split="train")
+        raw = datasets.load_dataset("bookcorpusopen", split="train", cache_dir=cfg.cache_dir)
     except Exception:
-        raw = _load_books_like_split()
+        raw = _load_books_like_split(cfg)
 
     builder = BPEBuilder(
         cfg.bpe["save_dir"] if (cfg.bpe and "save_dir" in cfg.bpe) else "runs/bpe_bookscorpus",
@@ -103,7 +89,7 @@ def load_bookcorpusopen(cfg: DataConfig) -> DatasetBundle:
 @DATASETS.register("glue")
 def load_glue(cfg: DataConfig) -> DatasetBundle:
     task = cfg.task or "mnli"
-    raw = datasets.load_dataset("glue", task)
+    raw = datasets.load_dataset("glue", task, cache_dir=cfg.cache_dir)
 
     if task == "sst2":
         text_cols, num_labels = ("sentence", None), 2
@@ -136,7 +122,7 @@ def load_glue(cfg: DataConfig) -> DatasetBundle:
 
 @DATASETS.register("race")
 def load_race(cfg: DataConfig) -> DatasetBundle:
-    raw = datasets.load_dataset("race", "all")
+    raw = datasets.load_dataset("race", "all", cache_dir=cfg.cache_dir)
     builder = BPEBuilder("runs/bpe_race", 40000, 2)
     tok = builder.load_or_train(_text_iter(raw["train"], ("article", "question")))
 
@@ -163,7 +149,7 @@ def load_race(cfg: DataConfig) -> DatasetBundle:
 
 @DATASETS.register("story_cloze")
 def load_story_cloze(cfg: DataConfig) -> DatasetBundle:
-    raw = datasets.load_dataset("story_cloze", "2016")
+    raw = datasets.load_dataset("story_cloze", "2016", cache_dir=cfg.cache_dir)
     builder = BPEBuilder("runs/bpe_story", 40000, 2)
     tok = builder.load_or_train(_text_iter(raw["validation"], None))
 
@@ -172,7 +158,7 @@ def load_story_cloze(cfg: DataConfig) -> DatasetBundle:
         if len(keys) >= 2:
             keys = sorted(keys)[:2]
             return [ex[keys[0]], ex[keys[1]]]
-        raise KeyError("StoryCloze: 未找到候选结尾字段（例如 'ending1','ending2'）。")
+        raise KeyError("StoryCloze: 未找到候选结尾字段（如 'ending1','ending2'）。")
 
     def build_inputs(ex, choice: str) -> str:
         sents = [ex.get(k) for k in ex.keys() if "sentence" in k.lower()]

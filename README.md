@@ -96,3 +96,18 @@ python -m gpt1_factory.cli.run_ablation --cfg configs/ablations.yaml
 * BPE training via `tokenizers` (40k merges by default).
 * Checkpoints saved under `runs/exp_*/checkpoints/`.
 * TensorBoard logs under `runs/exp_*/tb/`. Loguru writes `runs/exp_*/log.txt`.
+
+
+### Local data cache
+
+All datasets are cached under `gpt1_ablation_factory/data/hf_cache` by default.
+You can prefetch everything:
+
+```bash
+bash scripts/download.sh
+# or:
+python -m gpt1_factory.cli.download --target books
+python -m gpt1_factory.cli.download --target glue --glue-task mnli
+python -m gpt1_factory.cli.download --target race
+python -m gpt1_factory.cli.download --target story_cloze
+```

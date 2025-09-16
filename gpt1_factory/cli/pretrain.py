@@ -32,12 +32,16 @@ def _apply_includes(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _ensure_pretrain_data_defaults(cfg: Dict[str, Any]) -> None:
-    """Make config resilient if includes don’t carry full data section."""
     d = cfg.setdefault("data", {})
     d.setdefault("name", "bookcorpusopen")
     d.setdefault("batch_size", 64)
     d.setdefault("seq_len", 512)
     d.setdefault("num_workers", 2)
+    # NEW: default cache/exports under project data/
+    d.setdefault("cache_dir", str(Path("gpt1_ablation_factory/data/hf_cache").resolve()))
+    d.setdefault("export_dir", str(Path("gpt1_ablation_factory/data/exports").resolve()))
+    # Optional local raw text dir if you want to use your own .txt
+    d.setdefault("local_text_dir", str(Path("gpt1_ablation_factory/data/text").resolve()))
 
 
 def main():
@@ -68,7 +72,6 @@ def main():
         drop_last=True,
     )
 
-    # Build model (strip unknown kwargs handled inside Registry.create, but we still remove the 'name' key)
     model_kwargs = {k: v for k, v in model_cfg.__dict__.items() if k != "name"}
     model = MODELS.create(model_cfg.name, **model_kwargs)
 
