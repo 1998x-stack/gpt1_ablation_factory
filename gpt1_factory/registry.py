@@ -1,15 +1,12 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any, Callable, Dict
 
 
 class Registry:
-    """简单可插拔 Registry。
+    """Simple pluggable registry with safe kwargs filtering."""
 
-    示例：
-        MODELS.register("gpt_decoder")(GPTDecoder)
-        model = MODELS.create("gpt_decoder", **kwargs)
-    """
     def __init__(self) -> None:
         self._fns: Dict[str, Callable[..., Any]] = {}
 
@@ -24,7 +21,19 @@ class Registry:
     def create(self, name: str, **kwargs) -> Any:
         if name not in self._fns:
             raise KeyError(f"{name} not found, available: {list(self._fns)}")
-        return self._fns[name](**kwargs)
+        fn = self._fns[name]
+
+        # Drop None values first
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+
+        # If target accepts **kwargs keep all; otherwise filter by signature
+        sig = inspect.signature(fn)
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+            return fn(**kwargs)
+
+        allowed = set(sig.parameters.keys())
+        filtered = {k: v for k, v in kwargs.items() if k in allowed}
+        return fn(**filtered)
 
 
 MODELS = Registry()

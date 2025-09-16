@@ -164,7 +164,9 @@ class GPTDecoderLM(nn.Module):
 
         loss = None
         if labels is not None:
-            loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), labels.reshape(-1), ignore_index=0)
+            # use standard ignore_index for padded/invalid labels
+            loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)),
+                                   labels.reshape(-1), ignore_index=-100)
         return {"logits": logits, "last_hidden_state": x, "loss": loss}
 
 

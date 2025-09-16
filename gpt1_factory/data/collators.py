@@ -1,22 +1,25 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Sequence, Tuple
 
 import torch
 from tokenizers import Tokenizer
 
 
+_IGNORE_IDX = -100  # standard ignore index for LM/CE
+
+
 def _shift_labels_for_lm(input_ids: torch.Tensor, pad_id: int) -> torch.Tensor:
-    """构造 LM 辅助任务的 labels（右移一位），pad 用于忽略。"""
-    # labels 与 input 对齐为预测下一个 token
+    """Right-shift labels for next-token prediction; pad positions → -100."""
     labels = input_ids.clone()
     labels[:, :-1] = input_ids[:, 1:]
     labels[:, -1] = pad_id
+    labels[labels == pad_id] = _IGNORE_IDX
     return labels
 
 
 class LMTrainCollator:
-    """语言模型预训练 Collator：将文本拼接后切为长度为 seq_len 的样本。"""
+    """LM pretraining collator: pack text and cut into fixed seq_len blocks."""
 
     def __init__(self, tok: Tokenizer, seq_len: int = 512) -> None:
         self.tok = tok
@@ -31,7 +34,6 @@ class LMTrainCollator:
             out = self.tok.encode(t)
             ids.extend(out.ids + [eos])
 
-        # 划分为 (seq_len+1) 片段以便构造 (x,y)
         chunks = [
             ids[i : i + self.seq_len + 1] for i in range(0, max(0, len(ids) - self.seq_len - 1), self.seq_len + 1)
         ] or [ids[: self.seq_len + 1]]
@@ -47,21 +49,14 @@ class LMTrainCollator:
         input_ids = torch.tensor(x, dtype=torch.long)
         labels = torch.tensor(y, dtype=torch.long)
         attention_mask = (input_ids != self.pad_id).long()
+        labels[labels == self.pad_id] = _IGNORE_IDX  # ignore pads
         return {"input_ids": input_ids, "labels": labels, "attention_mask": attention_mask}
 
 
 class ClassificationCollator:
-    """下游分类 Collator：按任务字段拼接文本，tokenize 到 max_len。
-    可选返回 `labels_lm` 以支持微调阶段的辅助 LM 损失。
-    """
+    """Downstream classification collator; optionally returns labels_lm for aux-LM."""
 
-    def __init__(
-        self,
-        tok: Tokenizer,
-        max_len: int,
-        text_cols: Tuple[str, str | None],
-        return_lm_labels: bool = True,
-    ) -> None:
+    def __init__(self, tok: Tokenizer, max_len: int, text_cols: Tuple[str, str | None], return_lm_labels: bool = True) -> None:
         self.tok = tok
         self.max_len = max_len
         self.text_cols = text_cols
@@ -97,10 +92,7 @@ class ClassificationCollator:
 
 
 class MultiChoiceCollator:
-    """多选题 Collator（RACE、StoryCloze 等）。
-
-    将每个样本展开为 (num_choices) 个输入，打包成 (B, C, L)，Trainer 负责展平送入骨干网络。
-    """
+    """Multi-choice (RACE/StoryCloze): yields (B, C, L). Trainer flattens to (B*C, L)."""
 
     def __init__(
         self,
@@ -120,7 +112,6 @@ class MultiChoiceCollator:
         self.pad_id = tok.token_to_id("<pad>") or 0
 
     def __call__(self, batch: Sequence[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
-        B = len(batch)
         input_ids, attn_masks, labels, labels_lm = [], [], [], []
 
         for ex in batch:
@@ -137,7 +128,10 @@ class MultiChoiceCollator:
                 ids_per.append(ids)
                 attn_per.append(attn)
                 if self.return_lm_labels:
-                    lm_per.append(_shift_labels_for_lm(torch.tensor([ids]), self.pad_id).squeeze(0).tolist())
+                    t_ids = torch.tensor([ids], dtype=torch.long)
+                    lm = _shift_labels_for_lm(t_ids, self.pad_id).squeeze(0).tolist()
+                    lm_per.append(lm)
+
             input_ids.append(ids_per)
             attn_masks.append(attn_per)
             if "label" in ex and ex["label"] != -1:
@@ -148,7 +142,6 @@ class MultiChoiceCollator:
         input_ids = torch.tensor(input_ids, dtype=torch.long)        # (B, C, L)
         attention_mask = torch.tensor(attn_masks, dtype=torch.long)  # (B, C, L)
         batch_out = {"input_ids": input_ids, "attention_mask": attention_mask}
-
         if labels:
             batch_out["labels"] = torch.tensor(labels, dtype=torch.long)
         if self.return_lm_labels:

@@ -22,14 +22,13 @@ def _load_yaml(path: str) -> Dict[str, Any]:
 
 
 def _override_cfg(cfg: Dict[str, Any], kvs: List[str]) -> Dict[str, Any]:
-    """支持 a.b=c / include+=path.yaml。先记录 include+=，稍后合并。"""
+    """Support a.b=c and include+=path.yaml before applying includes."""
     includes_append: List[str] = []
     for kv in kvs:
         if "=" not in kv:
             continue
         k, v = kv.split("=", 1)
-        k = k.strip()
-        v = v.strip()
+        k, v = k.strip(), v.strip()
         if k in ("include+", "include+="):
             includes_append.append(v)
             continue
@@ -40,7 +39,6 @@ def _override_cfg(cfg: Dict[str, Any], kvs: List[str]) -> Dict[str, Any]:
             if p not in cur or not isinstance(cur[p], dict):
                 cur[p] = {}
             cur = cur[p]
-        # 粗略类型推断
         if v.lower() in ("true", "false"):
             val: Any = (v.lower() == "true")
         else:
@@ -65,10 +63,20 @@ def _apply_includes(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return merged
 
 
+def _ensure_finetune_data_defaults(cfg: Dict[str, Any]) -> None:
+    """If user passes only `data.task=...`, ensure other fields exist."""
+    d = cfg.setdefault("data", {})
+    d.setdefault("name", "glue")
+    d.setdefault("batch_size", 32)
+    d.setdefault("num_workers", 2)
+    d.setdefault("max_len", 256)
+
+
 def load_cfg_with_overrides(path: str, overrides: List[str]) -> Dict[str, Any]:
     cfg = _load_yaml(path)
-    cfg = _override_cfg(cfg, overrides)   # 先接收 include+= 与键值覆盖
-    cfg = _apply_includes(cfg)            # 再实际合并 include
+    cfg = _override_cfg(cfg, overrides)
+    cfg = _apply_includes(cfg)
+    _ensure_finetune_data_defaults(cfg)
     return cfg
 
 
@@ -99,7 +107,6 @@ def main():
         num_workers=data_cfg.num_workers, collate_fn=bundle.collator
     )
 
-    # 模型（去掉 name 以避免 Registry.create(name=..., name=...) 冲突）
     model_kwargs = {k: v for k, v in model_cfg.__dict__.items() if k != "name"}
     backbone = MODELS.create(model_cfg.name, **model_kwargs)
 

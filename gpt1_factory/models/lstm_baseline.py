@@ -44,5 +44,6 @@ class LSTMBaseline(nn.Module):
         logits = self.lm_head(x)
         loss = None
         if labels is not None:
-            loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), labels.reshape(-1), ignore_index=0)
+            loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)),
+                                   labels.reshape(-1), ignore_index=-100)
         return {"logits": logits, "last_hidden_state": x, "loss": loss}
