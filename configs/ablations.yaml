@@ -1,0 +1,30 @@
+# 统一控制若干组消融实验
+ablations:
+  - name: full_gpt_with_aux_lm
+    finetune_cfg: "configs/finetune_glue.yaml"
+    overrides:
+      finetune.aux_lm_lambda: 0.5
+      finetune.transfer_layers: -1
+
+  - name: no_pretrain_random_init
+    finetune_cfg: "configs/finetune_glue.yaml"
+    overrides:
+      finetune.pretrained_path: ""
+      finetune.aux_lm_lambda: 0.5
+
+  - name: no_aux_lm
+    finetune_cfg: "configs/finetune_glue.yaml"
+    overrides:
+      finetune.aux_lm_lambda: 0.0
+
+  - name: transfer_first_6_layers
+    finetune_cfg: "configs/finetune_glue.yaml"
+    overrides:
+      finetune.transfer_layers: 6
+      finetune.aux_lm_lambda: 0.5
+
+  - name: lstm_baseline
+    finetune_cfg: "configs/finetune_glue.yaml"
+    model_cfg: "configs/model/lstm_baseline.yaml"
+    overrides:
+      finetune.aux_lm_lambda: 0.5

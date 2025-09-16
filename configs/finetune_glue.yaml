@@ -1,0 +1,19 @@
+exp:
+  out_dir: "runs/exp_finetune_glue"
+  seed: 123
+
+include:
+  - "configs/model/gpt_small.yaml"
+  - "configs/data/glue_mnli.yaml"
+
+finetune:
+  pretrained_path: "runs/exp_pretrain_books/checkpoints/latest.pt"
+  aux_lm_lambda: 0.5
+  epochs: 3
+  lr: 6.25e-5
+  warmup_ratio: 0.002  # 0.2%
+  weight_decay: 0.01
+  grad_clip: 1.0
+  amp: true
+  transfer_layers: -1  # -1 表示全部；否则为前K层
+  head_dropout: 0.1

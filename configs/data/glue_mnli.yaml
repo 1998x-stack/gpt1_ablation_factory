@@ -1,0 +1,6 @@
+data:
+  name: glue
+  task: "mnli"
+  max_len: 256
+  batch_size: 32
+  num_workers: 4

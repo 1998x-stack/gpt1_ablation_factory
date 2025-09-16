@@ -1,0 +1,8 @@
+model:
+  name: lstm_baseline
+  vocab_size: 50257
+  d_model: 768
+  lstm_hidden: 2048
+  num_layers: 1
+  max_len: 512
+  dropout: 0.1

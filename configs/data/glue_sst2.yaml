@@ -1,0 +1,6 @@
+data:
+  name: glue
+  task: "sst2"
+  max_len: 128
+  batch_size: 32
+  num_workers: 4

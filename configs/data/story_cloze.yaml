@@ -1,0 +1,5 @@
+data:
+  name: story_cloze
+  max_len: 256
+  batch_size: 16
+  num_workers: 4

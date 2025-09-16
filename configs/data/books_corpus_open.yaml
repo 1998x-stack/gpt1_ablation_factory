@@ -1,0 +1,11 @@
+data:
+  name: bookcorpusopen
+  text_column: "text"
+  seq_len: 512
+  batch_size: 64
+  num_workers: 4
+  bpe:
+    train: true
+    vocab_size: 40000
+    min_freq: 2
+    save_dir: "runs/bpe_bookscorpus"

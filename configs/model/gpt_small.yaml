@@ -1,0 +1,14 @@
+model:
+  name: gpt_decoder
+  vocab_size: 50257           # 若使用自训练BPE会被覆盖
+  n_layer: 12
+  n_head: 12
+  d_model: 768
+  d_ff: 3072
+  max_len: 512
+  dropout: 0.1
+  attn_dropout: 0.1
+  resid_dropout: 0.1
+  layer_norm_eps: 1.0e-5
+  tie_emb: false
+  gelu: true
