@@ -8,7 +8,6 @@ from tokenizers.pre_tokenizers import Whitespace
 
 from gpt1_factory.models.generation import sample_from_scores, generate_model
 from gpt1_factory.models.gpt_decoder import GPTDecoderLM
-from gpt1_factory.models.heads import ClassificationHead
 
 
 def _tiny_tokenizer() -> Tokenizer:
