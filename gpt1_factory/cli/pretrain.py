@@ -14,6 +14,7 @@ from ..utils.logging import setup_loguru
 from ..utils.seed import set_seed
 from ..registry import MODELS
 from ..data import load_dataset_factory
+from ..data.datasets import resolve_model_vocab_size
 from ..trainers.pretrain_trainer import PretrainTrainer
 
 
@@ -63,6 +64,8 @@ def main():
     set_seed(exp.seed)
 
     bundle = load_dataset_factory(data_cfg)
+    # Align embedding/output vocab with the trained BPE tokenizer.
+    model_cfg.vocab_size = resolve_model_vocab_size(bundle.tokenizer, model_cfg.vocab_size)
     train_loader = DataLoader(
         bundle.train,
         batch_size=data_cfg.batch_size,
