@@ -8,7 +8,6 @@ from gpt1_factory.data.datasets import (
     DatasetBundle,
     resolve_model_vocab_size,
 )
-from gpt1_factory.data.text_bpe import BPEBuilder
 
 
 def _make_config(text_dir, cache_dir, bpe_dir) -> DataConfig:
@@ -34,13 +33,13 @@ def test_load_local_text(tmp_path: Path) -> None:
     assert isinstance(bundle, DatasetBundle)
     assert bundle.train is not None and bundle.valid is None and bundle.test is None
     assert bundle.tokenizer is not None
-    # 200 vocab + 5 special tokens -> vocab_size between 200 and 205
+    # BPE caps at configured vocab_size but may be smaller for a tiny corpus.
     assert 0 < bundle.tokenizer.get_vocab_size() <= 205
     ids = bundle.tokenizer.encode("Once upon a time").ids
     assert len(ids) > 0
 
     # BPE json is persisted so a second load reuses it
-    second = load_local_text(text_config := _make_config(text_dir, tmp_path / "cache", tmp_path / "bpe"))
+    second = load_local_text(_make_config(text_dir, tmp_path / "cache", tmp_path / "bpe"))
     assert second.tokenizer.get_vocab_size() == bundle.tokenizer.get_vocab_size()
 
 
