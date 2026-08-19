@@ -16,17 +16,17 @@ def save_checkpoint(path: str | Path, model: torch.nn.Module, optim: Optional[to
 
 
 def load_pretrained_partial(model: torch.nn.Module, path: str | Path, transfer_layers: int = -1) -> None:
-    """部分加载预训练：仅前 K 层（transfer_layers>0）或全部（-1）。"""
+    """Partially load pretrained weights: only the first K layers (transfer_layers>0) or all (-1)."""
     ckpt = torch.load(str(path), map_location="cpu")
     state = ckpt["model"]
     if transfer_layers == -1:
         model.load_state_dict(state, strict=False)
         return
-    # 过滤仅前 K 层相关的权重
+    # filter only the first K layer weights
     filtered = {}
     for k, v in state.items():
         if ".blocks." in k:
-            # 解析层号
+            # parse layer number
             try:
                 layer_idx = int(k.split(".blocks.")[1].split(".")[0])
                 if layer_idx < transfer_layers:
@@ -34,6 +34,6 @@ def load_pretrained_partial(model: torch.nn.Module, path: str | Path, transfer_l
             except Exception:
                 pass
         else:
-            # 共享层（嵌入/pos_emb/ln_f等）保留
+            # keep shared layers (embedding/pos_emb/ln_f etc)
             filtered[k] = v
     model.load_state_dict(filtered, strict=False)
