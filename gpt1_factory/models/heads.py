@@ -5,7 +5,7 @@ import torch.nn as nn
 
 
 class ClassificationHead(nn.Module):
-    """通用分类头，给 LSTM/GPT 的 last_hidden_state 使用。"""
+    """Generic classification head used with the LSTM/GPT last-hidden-state output."""
 
     def __init__(self, d_model: int, num_labels: int, dropout: float = 0.1) -> None:
         super().__init__()

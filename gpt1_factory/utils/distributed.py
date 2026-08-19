@@ -18,7 +18,7 @@ def is_main_process() -> bool:
 
 @contextmanager
 def main_process_first():
-    """在多卡情况下，仅主进程先执行（例如 tokenizer 训练），其余等待。"""
+    """With multiple GPUs, run only the main process first (e.g. tokenizer training) while the rest wait."""
     if world_size() > 1:
         torch.distributed.barrier()
         if is_main_process():

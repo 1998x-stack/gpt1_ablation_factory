@@ -9,7 +9,7 @@ import torch
 
 
 def set_seed(seed: int, deterministic: bool = False) -> None:
-    """设置随机种子。"""
+    """Set random seeds."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)

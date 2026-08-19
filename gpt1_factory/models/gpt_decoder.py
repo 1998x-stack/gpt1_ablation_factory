@@ -12,21 +12,21 @@ from ..registry import MODELS
 
 
 class GELU(nn.Module):
-    """GELU 激活函数的模块封装。"""
+    """Module wrapper around the GELU activation."""
     def forward(self, x):
-        """前向计算。
+        """Apply GELU activation.
 
-        参数:
-            x: 任意形状的输入张量。
+        Args:
+            x: Input tensor of arbitrary shape.
 
-        返回:
-            与输入同形状的张量, 应用 GELU 激活后结果。
+        Returns:
+            Tensor of the same shape as the input with GELU applied.
         """
         return F.gelu(x)
 
 
 class CausalSelfAttention(nn.Module):
-    """标准掩码自注意力。"""
+    """Causal masked self-attention."""
 
     def __init__(self, d_model: int, n_head: int, attn_dropout: float, resid_dropout: float, max_len: int) -> None:
         super().__init__()
@@ -44,14 +44,14 @@ class CausalSelfAttention(nn.Module):
         self.register_buffer("mask", mask)
 
     def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """前向计算带因果掩码的自注意力。
+        """Apply causal-masked self-attention.
 
-        参数:
-            x: 形状为 (B, T, C) 的输入序列表示。
-            attn_mask: 可选注意力掩码, 形状为 (B, T)。0 表示被遮挡。
+        Args:
+            x: Input sequence representation of shape (B, T, C).
+            attn_mask: Optional attention mask of shape (B, T); 0 means masked.
 
-        返回:
-            形状为 (B, T, C) 的更新后表示。
+        Returns:
+            Updated representation of shape (B, T, C).
         """
         B, T, C = x.size()
         qkv = self.qkv(x).chunk(3, dim=-1)
@@ -72,7 +72,7 @@ class CausalSelfAttention(nn.Module):
 
 
 class Block(nn.Module):
-    """Transformer 解码块: LN + 自注意力 + MLP 的残差堆叠。"""
+    """Transformer decoder block: residual stack of LN + self-attention + MLP."""
     def __init__(self, d_model: int, n_head: int, d_ff: int, dropout: float, attn_dropout: float, resid_dropout: float, max_len: int):
         super().__init__()
         self.ln1 = nn.LayerNorm(d_model)
@@ -86,14 +86,14 @@ class Block(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """前向计算一个解码块。
+        """Run a single decoder block.
 
-        参数:
-            x: (B, T, C) 当前层输入。
-            attn_mask: (B, T) 可选注意力掩码。
+        Args:
+            x: (B, T, C) current layer input.
+            attn_mask: (B, T) optional attention mask.
 
-        返回:
-            (B, T, C) 残差更新后的输出。
+        Returns:
+            (B, T, C) residual-updated output.
         """
         x = x + self.attn(self.ln1(x), attn_mask)
         x = x + self.mlp(self.ln2(x))
@@ -102,7 +102,7 @@ class Block(nn.Module):
 
 @MODELS.register("gpt_decoder")
 class GPTDecoderLM(nn.Module):
-    """仅解码器 Transformer 语言模型, 亦可作为分类等下游任务骨干。"""
+    """Only-decoder Transformer language model, also usable as a backbone for downstream classification."""
 
     def __init__(
         self,
@@ -140,18 +140,18 @@ class GPTDecoderLM(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None, labels: Optional[torch.Tensor] = None):
-        """前向计算语言模型。
+        """Run the forward pass of the language model.
 
-        参数:
-            input_ids: (B, T) 词表索引序列, 0 预留给 padding/ignore。
-            attention_mask: (B, T) 可选掩码, 1 为有效, 0 为忽略。
-            labels: (B, T) 可选标签, 若提供则返回交叉熵损失。
+        Args:
+            input_ids: (B, T) sequence of vocab indices; 0 reserved for padding/ignore.
+            attention_mask: (B, T) optional mask; 1 means valid, 0 means ignored.
+            labels: (B, T) optional targets; if provided, returns the cross-entropy loss.
 
-        返回:
-            包含以下键的字典:
-            - "logits": (B, T, V) 每个位置的词表分布。
-            - "last_hidden_state": (B, T, C) 最后一层隐藏表示。
-            - "loss": (标量或 None) 若提供 labels 则为训练损失。
+        Returns:
+            A dict with the following keys:
+            - "logits": (B, T, V) per-position vocabulary distribution.
+            - "last_hidden_state": (B, T, C) final-layer hidden representation.
+            - "loss": (scalar or None) training loss if labels were provided.
         """
         B, T = input_ids.shape
         pos = torch.arange(0, T, device=input_ids.device).unsqueeze(0)
@@ -171,7 +171,7 @@ class GPTDecoderLM(nn.Module):
 
 
 class GPTClassificationHead(nn.Module):
-    """把最后一层的 h_m^ℓ 过线性+dropout 做分类。"""
+    """Classify by passing the last hidden state through a linear layer and dropout."""
 
     def __init__(self, d_model: int, num_labels: int, dropout: float = 0.1) -> None:
         super().__init__()
@@ -179,14 +179,14 @@ class GPTClassificationHead(nn.Module):
         self.fc = nn.Linear(d_model, num_labels)
 
     def forward(self, last_hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
-        """前向分类。
+        """Run the classification forward pass.
 
-        参数:
-            last_hidden_state: (B, T, C) 编码后的最后一层隐藏表示。
-            attention_mask: (B, T) 可选掩码, 此处未使用。
+        Args:
+            last_hidden_state: (B, T, C) encoded final hidden representation.
+            attention_mask: (B, T) optional mask; unused here.
 
-        说明:
-            取句子末位置的 token 表示作为句向量(也可用均值池化)。
+        Note:
+            Uses the last-position token representation as the sentence vector (mean pooling is also possible).
         """
         x = last_hidden_state[:, -1, :]
         x = self.drop(x)

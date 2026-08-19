@@ -6,7 +6,7 @@ from loguru import logger
 
 
 def setup_loguru(log_file: str | Path) -> None:
-    """配置 Loguru 到文件与控制台。"""
+    """Configure Loguru for file and console output."""
     log_file = Path(log_file)
     log_file.parent.mkdir(parents=True, exist_ok=True)
     logger.remove()

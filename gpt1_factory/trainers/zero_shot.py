@@ -7,9 +7,9 @@ import torch.nn.functional as F
 
 
 class ZeroShotHeuristics:
-    """论文里的零样本启发式评估（简化版）。
-    - SST2: 比较 "positive"/"negative" 的续写概率
-    - CoLA: 平均 token 对数概率阈值（此处仅示例，实际需要语法错误集）
+    """Zero-shot heuristic evaluation from the paper (simplified).
+    - SST-2: compare the continuation probability of "positive" vs "negative"
+    - CoLA: mean token log-probability threshold (illustrative only; a real grammar-error set is needed)
     """
 
     def __init__(self, backbone: torch.nn.Module, tokenizer) -> None:

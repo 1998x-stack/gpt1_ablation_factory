@@ -8,11 +8,11 @@ from scipy.stats import pearsonr, spearmanr
 
 
 def compute_metrics(task: str, y_true: Sequence, y_pred: Sequence) -> Dict[str, float]:
-    """GLUE 主要任务指标：
-    - SST2/MNLI: acc
-    - MRPC/QQP:  acc & f1（macro）
-    - CoLA:     matthews
-    - STS-B:    pearson & spearman （y_pred 应为回归输出的连续值）
+    """GLUE primary-task metrics.
+    - SST-2/MNLI: accuracy
+    - MRPC/QQP: accuracy & macro-F1
+    - CoLA: Matthews correlation
+    - STS-B: Pearson & Spearman (y_pred should be continuous regression outputs)
     """
     if task in ("sst2", "mnli"):
         return {"acc": float(accuracy_score(y_true, y_pred))}
@@ -29,5 +29,5 @@ def compute_metrics(task: str, y_true: Sequence, y_pred: Sequence) -> Dict[str, 
         p = float(pearsonr(y_true, y_pred)[0])
         s = float(spearmanr(y_true, y_pred)[0])
         return {"pearson": p, "spearman": s}
-    # 兜底
+    # fallback
     return {"acc": float(accuracy_score(y_true, y_pred))}

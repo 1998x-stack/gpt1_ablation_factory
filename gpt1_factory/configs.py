@@ -10,8 +10,8 @@ class ExpConfig:
     """Experiment-level configuration.
 
     Attributes:
-        out_dir: 输出目录。
-        seed: 随机种子。
+        out_dir: Output directory.
+        seed: Random seed.
     """
     out_dir: str
     seed: int = 42
@@ -21,7 +21,7 @@ class ExpConfig:
 class OptimConfig:
     """Optimizer/training schedule config for pretraining.
 
-    按论文：Adam + 2000 warmup + cosine 衰减。
+    Per the paper: Adam + 2000 warmup steps + cosine decay.
     """
     lr: float = 2.5e-4
     betas: tuple[float, float] = (0.9, 0.95)
@@ -38,16 +38,16 @@ class FinetuneConfig:
     """Finetuning config.
 
     Attributes:
-        pretrained_path: 预训练权重路径；为空则从头训练。
-        aux_lm_lambda: 辅助 LM loss 系数 (λ)，论文建议 0.5。
-        epochs: 训练轮数，论文常用 3。
-        lr: 微调学习率，论文 6.25e-5。
-        warmup_ratio: 线性 warmup 比例（如 0.002 = 0.2%）。
-        weight_decay: AdamW 权重衰减。
-        grad_clip: 梯度裁剪阈值。
-        amp: 是否启用混合精度。
-        transfer_layers: 从预训练中迁移的层数；-1 表示全部。
-        head_dropout: 分类头 dropout。
+        pretrained_path: Path to pretrained weights; empty means train from scratch.
+        aux_lm_lambda: Auxiliary LM loss weight (λ); paper suggests 0.5.
+        epochs: Number of training epochs; paper commonly uses 3.
+        lr: Finetuning learning rate; paper 6.25e-5.
+        warmup_ratio: Linear warmup ratio (e.g. 0.002 = 0.2%).
+        weight_decay: AdamW weight decay.
+        grad_clip: Gradient clipping threshold.
+        amp: Whether mixed precision is enabled.
+        transfer_layers: Number of layers transferred from pretraining; -1 means all.
+        head_dropout: Classification head dropout.
     """
     pretrained_path: str = ""
     aux_lm_lambda: float = 0.5
@@ -105,7 +105,7 @@ class CheckpointConfig:
 
 
 def dataclass_from_dict(dc_cls, d: dict):
-    """将 dict 递归映射到 dataclass。"""
+    """Recursively map a dict onto a dataclass."""
     fieldset = {f.name for f in dataclasses.fields(dc_cls)}
     kwargs = {k: v for k, v in d.items() if k in fieldset}
     return dc_cls(**kwargs)

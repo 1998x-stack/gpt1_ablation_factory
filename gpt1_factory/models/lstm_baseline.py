@@ -11,7 +11,7 @@ from ..registry import MODELS
 
 @MODELS.register("lstm_baseline")
 class LSTMBaseline(nn.Module):
-    """单层 LSTM 作为对照（论文消融用），hidden=2048 默认。"""
+    """Single-layer LSTM baseline for ablation (hidden=2048 by default)."""
 
     def __init__(
         self,

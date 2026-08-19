@@ -5,7 +5,7 @@ from typing import Callable
 
 
 def linear_warmup_cosine_decay(warmup_steps: int, max_steps: int) -> Callable[[int], float]:
-    """线性 warmup + cosine 衰减的学习率比例函数。"""
+    """Learning-rate scale: linear warmup then cosine decay."""
     def lr_lambda(step: int) -> float:
         if step < warmup_steps:
             return (step + 1) / max(1, warmup_steps)

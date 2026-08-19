@@ -14,7 +14,7 @@ from ..models.checkpoint import save_checkpoint
 
 
 class PretrainTrainer:
-    """语言模型预训练 Trainer。"""
+    """Language-model pretraining trainer."""
 
     def __init__(self, exp: ExpConfig, optim_cfg: OptimConfig, model: torch.nn.Module,
                  train_loader: DataLoader, out_dir: str | Path, amp: bool = True) -> None:

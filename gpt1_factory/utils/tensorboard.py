@@ -4,7 +4,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 def create_tb_writer(out_dir: str | Path) -> SummaryWriter:
-    """创建 TensorBoard 写入器。"""
+    """Create a TensorBoard writer."""
     tb_dir = Path(out_dir) / "tb"
     tb_dir.mkdir(parents=True, exist_ok=True)
     return SummaryWriter(str(tb_dir))

@@ -6,11 +6,11 @@ from typing import Dict, Tuple
 
 @dataclass
 class TaskFormatter:
-    """将结构化输入按论文策略顺序化拼接，交给统一 LM 处理。
+    """Serialize structured inputs into sequences per the paper for the shared LM.
 
     - NLI: "premise <sep> hypothesis"
-    - 相似度/复述: 双序过一遍再相加（此处在 collator 前构造字段；如需更细控制可扩展）
-    - QA:  [doc; question; <sep>; option_k] 对每个选项各一次
+    - Similarity/paraphrase: run both orders once and add (fields built before the collator; extensible for finer control)
+    - QA: [doc; question; <sep>; option_k] once per option
     """
     mode: str = "classification"  # or "qa", "similarity"
 

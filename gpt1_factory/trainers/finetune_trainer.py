@@ -16,7 +16,7 @@ from ..tasks.metrics import compute_metrics
 
 
 class FinetuneTrainer:
-    """统一微调 Trainer：支持分类/回归/多选，辅助LM，线性warmup→常数。"""
+    """Unified finetuning trainer: classification/regression/multi-choice, auxiliary LM, linear-warmup-to-constant."""
 
     def __init__(self, exp: ExpConfig, cfg: FinetuneConfig, backbone: torch.nn.Module, num_labels: int,
                  train_loader: DataLoader, valid_loader: Optional[DataLoader], task_name: str) -> None:
@@ -105,7 +105,7 @@ class FinetuneTrainer:
 
                     loss = loss_cls
 
-                    # —— 修复：多选时对 LM 辅助也需展平 (B,C,L) → (B*C,L)
+                    # Fix: for multi-choice, flatten the LM auxiliary inputs (B,C,L) -> (B*C,L)
                     if self.cfg.aux_lm_lambda > 0.0 and "labels_lm" in batch:
                         if batch["input_ids"].dim() == 3:
                             B, C, L = batch["input_ids"].shape
