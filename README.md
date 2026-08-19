@@ -112,7 +112,7 @@ the checkpoint generates continuation text.
 /usr/bin/python3 -m pip install -r requirements.txt   # if needed
 cp sample_corpus.txt gpt1_ablation_factory/data/text/
 /usr/bin/python3 -m gpt1_factory.cli.pretrain --cfg configs/pretrain_local.yaml
-/usr/bin/python3 -m gpt1_factory.cli.generate --bpe runs/bpe_local/bpe.json --ckpt runs/exp_local/checkpoints/latest.pt --model-yaml configs/model/gpt_mini.yaml --prompt "Once upon a time"
+/usr/bin/python3 -m gpt1_factory.cli.generate --bpe runs/bpe_local/bpe.json --ckpt runs/exp_local/checkpoints/latest.pt --model-yaml configs/model/gpt_mini.yaml --prompt "Once upon a time" --no-stop-on-eos --max-new-tokens 80
 ```
 
 The small 4-layer model here overfits a ~100k-word corpus, so it is a demo of the
