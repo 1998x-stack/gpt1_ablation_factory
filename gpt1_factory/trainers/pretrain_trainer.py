@@ -42,6 +42,7 @@ class PretrainTrainer:
         # max_steps is the optimizer-step budget; cycle the dataloader over
         # multiple epochs until it is reached.
         while step < self.optim_cfg.max_steps:
+            epoch_start = step
             epoch += 1
             for batch in self.train_loader:
                 self.model.train()
@@ -70,5 +71,8 @@ class PretrainTrainer:
 
                 if step >= self.optim_cfg.max_steps:
                     break
+            if step == epoch_start:
+                logger.warning("[pretrain] dataloader produced no batches; stopping to avoid a loop.")
+                break
             logger.info(f"[pretrain] epoch={epoch} steps={step} (effective lr={self.optim.param_groups[0]['lr']:.2e})")
         logger.info("Pretraining finished.")

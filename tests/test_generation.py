@@ -48,3 +48,40 @@ def test_generate_model_returns_string_with_prompt() -> None:
     # prompt string (the raw form can never appear verbatim under this tokenizer).
     prompt_ids = tok.encode("hello world", add_special_tokens=False).ids
     assert isinstance(text, str) and text.startswith(tok.decode(prompt_ids))
+
+
+class _AlwaysEosModel(torch.nn.Module):
+    """Dummy LM that overwhelmingly samples `</s>`; records the longest sequence seen."""
+
+    def __init__(self, eos_id: int, vocab: int) -> None:
+        super().__init__()
+        self.eos_id = eos_id
+        self.vocab = vocab
+        self.max_len = 128
+        self.longest = 0
+
+    def forward(self, input_ids, attention_mask=None, labels=None):
+        self.longest = max(self.longest, input_ids.size(1))
+        logits = torch.zeros(input_ids.size(0), input_ids.size(1), self.vocab)
+        logits[:, -1, self.eos_id] = 10.0
+        return {"logits": logits}
+
+
+def test_empty_stop_ids_disables_eos_stop() -> None:
+    tok = _tiny_tokenizer()
+    eos = tok.token_to_id("</s>")
+    vocab = tok.get_vocab_size() + 20
+
+    stop_default = _AlwaysEosModel(eos, vocab)
+    no_stop = _AlwaysEosModel(eos, vocab)
+
+    generate_model(stop_default, tok, "hello world", max_new_tokens=8, device="cpu")
+    generate_model(no_stop, tok, "hello world", max_new_tokens=8, stop_ids=[], device="cpu")
+
+    prompt_len = len(tok.encode("hello world", add_special_tokens=False).ids)
+    # Default stops almost immediately on </s>; passing an empty list ignores it
+    # and runs the full budget (prompt + max_new_tokens, capped at max_len).
+    # The counter sees forward-call lengths, so the last appended token (the
+    # max_new_tokens-th) hasn't been fed through by the time generation ends.
+    assert stop_default.longest < no_stop.longest
+    assert no_stop.longest >= prompt_len + 8 - 1

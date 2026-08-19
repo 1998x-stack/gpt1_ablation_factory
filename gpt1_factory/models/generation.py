@@ -70,8 +70,9 @@ def generate_model(
     model.to(device).eval()
 
     max_len = getattr(model, "max_len", None)
-    eos_id = tokenizer.token_to_id("</s>")
-    stop_ids = stop_ids or ([eos_id] if eos_id is not None else [])
+    if stop_ids is None:
+        eos_id = tokenizer.token_to_id("</s>")
+        stop_ids = [eos_id] if eos_id is not None else []
 
     ids = tokenizer.encode(prompt, add_special_tokens=False).ids
     input_ids = torch.tensor([ids], dtype=torch.long, device=device)
