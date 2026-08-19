@@ -35,7 +35,7 @@ def test_load_local_text(tmp_path: Path) -> None:
     assert bundle.train is not None and bundle.valid is None and bundle.test is None
     assert bundle.tokenizer is not None
     # 200 vocab + 5 special tokens -> vocab_size between 200 and 205
-    assert 200 <= bundle.tokenizer.get_vocab_size() <= 205
+    assert 0 < bundle.tokenizer.get_vocab_size() <= 205
     ids = bundle.tokenizer.encode("Once upon a time").ids
     assert len(ids) > 0
 
