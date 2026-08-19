@@ -1,0 +1,14 @@
+model:
+  name: gpt_decoder
+  vocab_size: 2000          # overridden by trained tokenizer
+  n_layer: 4
+  n_head: 4
+  d_model: 256
+  d_ff: 1024
+  max_len: 128
+  dropout: 0.1
+  attn_dropout: 0.1
+  resid_dropout: 0.1
+  layer_norm_eps: 1.0e-5
+  tie_emb: false
+  gelu: true

@@ -1,0 +1,12 @@
+data:
+  name: local_text
+  text_column: "text"
+  seq_len: 128
+  batch_size: 16
+  num_workers: 2
+  local_text_dir: "gpt1_ablation_factory/data/text"
+  bpe:
+    train: true
+    vocab_size: 4000
+    min_freq: 2
+    save_dir: "runs/bpe_local"
