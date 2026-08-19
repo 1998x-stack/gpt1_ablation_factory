@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+*.pt
+runs/
+.superpowers/
+gpt1_ablation_factory/data/
+gpt1_ablation_factory/data/hf_cache/
+gpt1_ablation_factory/data/exports/

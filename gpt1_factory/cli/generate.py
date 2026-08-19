@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 import torch
 import yaml
@@ -19,6 +20,12 @@ def _load_yaml(path: str) -> dict:
 
 def _load_model(model_yaml: str, bpe_path: str, ckpt_path: str):
     """Instantiate a model whose vocab matches the trained BPE, then load weights."""
+    if not os.path.exists(model_yaml):
+        raise FileNotFoundError(f"Model config YAML not found: {model_yaml}")
+    if not os.path.exists(bpe_path):
+        raise FileNotFoundError(f"BPE tokenizer not found: {bpe_path}")
+    if not os.path.exists(ckpt_path):
+        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
     model_cfg = dataclass_from_dict(ModelConfig, _load_yaml(model_yaml).get("model", {}))
     tokenizer = Tokenizer.from_file(bpe_path)
     model_cfg.vocab_size = tokenizer.get_vocab_size()

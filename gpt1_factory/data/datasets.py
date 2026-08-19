@@ -5,6 +5,7 @@ from typing import Any, Optional, Tuple, Iterable, List
 import os
 from glob import glob
 from pathlib import Path
+import warnings
 
 import datasets
 from torch.utils.data import Dataset
@@ -76,7 +77,14 @@ def resolve_model_vocab_size(tokenizer: Any, configured: int) -> int:
     corpus was tokenized with, otherwise input indices can exceed the
     embedding table.
     """
-    return tokenizer.get_vocab_size()
+    tok_vocab = tokenizer.get_vocab_size()
+    if isinstance(configured, int) and configured > 0 and configured != tok_vocab:
+        warnings.warn(
+            f"Configured vocab_size ({configured}) differs from the trained "
+            f"tokenizer's vocabulary size ({tok_vocab}); using the tokenizer's "
+            f"size ({tok_vocab}) for the model.",
+        )
+    return tok_vocab
 
 
 @DATASETS.register("local_text")
