@@ -69,6 +69,47 @@ def _load_books_like_split(cfg: DataConfig) -> datasets.Dataset:
     return datasets.load_dataset("ag_news", split="train", cache_dir=cache_dir)
 
 
+def resolve_model_vocab_size(tokenizer: Any, configured: int) -> int:
+    """Prefer the trained tokenizer's vocabulary size over the config default.
+
+    The model embedding/output heads must exactly match the BPE vocab the
+    corpus was tokenized with, otherwise input indices can exceed the
+    embedding table.
+    """
+    return tokenizer.get_vocab_size()
+
+
+@DATASETS.register("local_text")
+def load_local_text(cfg: DataConfig) -> DatasetBundle:
+    """Load a directory of raw ``*.txt`` files as a pretraining corpus.
+
+    This is the first-class, network-free path for training on your own
+    text files (e.g. ``data/text/*.txt``). It reuses the same BPE + LM
+    collator pipeline as the book-corpus loader.
+    """
+    text_dir = Path(cfg.local_text_dir or "gpt1_ablation_factory/data/text")
+    if not text_dir.exists():
+        raise FileNotFoundError(f"local_text corpus dir not found: {text_dir}")
+    files = sorted(glob(str(text_dir / "**/*.txt"), recursive=True))
+    if not files:
+        raise FileNotFoundError(f"No *.txt files found in local_text_dir: {text_dir}")
+
+    raw = datasets.load_dataset("text", data_files={"train": files},
+                                cache_dir=cfg.cache_dir)["train"]
+
+    bpe_cfg = cfg.bpe or {}
+    save_dir = bpe_cfg.get("save_dir", "runs/bpe_local")
+    builder = BPEBuilder(
+        save_dir,
+        bpe_cfg.get("vocab_size", 4000),
+        bpe_cfg.get("min_freq", 2),
+    )
+    tok = builder.load_or_train(_text_iter(raw, None))
+    collator = LMTrainCollator(tok, seq_len=cfg.seq_len or 256)
+    return DatasetBundle(train=raw, valid=None, test=None,
+                         tokenizer=tok, collator=collator)
+
+
 @DATASETS.register("bookcorpusopen")
 def load_bookcorpusopen(cfg: DataConfig) -> DatasetBundle:
     try:
