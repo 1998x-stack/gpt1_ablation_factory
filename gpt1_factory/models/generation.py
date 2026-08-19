@@ -69,6 +69,7 @@ def generate_model(
     device = device or default_device()
     model.to(device).eval()
 
+    max_len = getattr(model, "max_len", None)
     eos_id = tokenizer.token_to_id("</s>")
     stop_ids = stop_ids or ([eos_id] if eos_id is not None else [])
 
@@ -76,6 +77,9 @@ def generate_model(
     input_ids = torch.tensor([ids], dtype=torch.long, device=device)
 
     for _ in range(int(max_new_tokens)):
+        # Do not exceed the model's positional-embedding budget.
+        if max_len is not None and input_ids.size(1) >= max_len:
+            break
         logits = model(input_ids=input_ids)["logits"][0, -1, :]
         next_id = int(sample_from_scores(logits, temperature, top_k).item())
         if next_id in stop_ids:

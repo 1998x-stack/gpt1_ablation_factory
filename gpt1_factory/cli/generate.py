@@ -40,17 +40,21 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--top-k", type=int, default=0)
     parser.add_argument("--num-samples", type=int, default=1)
+    parser.add_argument("--no-stop-on-eos", action="store_true",
+                        help="Do not stop generation on the </s> token (line/para boundary).")
     args = parser.parse_args()
 
     model, tokenizer = _load_model(args.model_yaml, args.bpe, args.ckpt)
     logger.info(f"Loaded model from {args.ckpt} on {default_device()}")
 
+    stop_ids = [] if args.no_stop_on_eos else None
     for i in range(1, args.num_samples + 1):
         text = generate_model(
             model, tokenizer, args.prompt,
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,
             top_k=args.top_k,
+            stop_ids=stop_ids,
         )
         print(f"--- sample {i} ---")
         print(text)

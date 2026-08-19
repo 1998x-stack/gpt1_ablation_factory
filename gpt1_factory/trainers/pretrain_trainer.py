@@ -37,32 +37,38 @@ class PretrainTrainer:
 
     def train(self, save_every: int = 10000, keep_last: int = 5) -> None:
         step = 0
+        epoch = 0
         losses = []
-        for batch in self.train_loader:
-            self.model.train()
-            batch = {k: v.to(self.device) for k, v in batch.items()}
-            with torch.cuda.amp.autocast(enabled=self.scaler.is_enabled()):
-                out = self.model(**batch)
-                loss = out["loss"]
-            self.scaler.scale(loss).backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.optim_cfg.grad_clip)
-            self.scaler.step(self.optim)
-            self.scaler.update()
-            self.optim.zero_grad(set_to_none=True)
-            self.scheduler.step()
+        # max_steps is the optimizer-step budget; cycle the dataloader over
+        # multiple epochs until it is reached.
+        while step < self.optim_cfg.max_steps:
+            epoch += 1
+            for batch in self.train_loader:
+                self.model.train()
+                batch = {k: v.to(self.device) for k, v in batch.items()}
+                with torch.cuda.amp.autocast(enabled=self.scaler.is_enabled()):
+                    out = self.model(**batch)
+                    loss = out["loss"]
+                self.scaler.scale(loss).backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.optim_cfg.grad_clip)
+                self.scaler.step(self.optim)
+                self.scaler.update()
+                self.optim.zero_grad(set_to_none=True)
+                self.scheduler.step()
 
-            step += 1
-            losses.append(loss.item())
-            if step % 100 == 0:
-                avg = sum(losses[-100:]) / min(100, len(losses))
-                self.writer.add_scalar("train/loss", avg, step)
-                self.writer.add_scalar("train/lr", self.optim.param_groups[0]["lr"], step)
-                logger.info(f"[pretrain] step={step} loss={avg:.4f}")
+                step += 1
+                losses.append(loss.item())
+                if step % 100 == 0:
+                    avg = sum(losses[-100:]) / min(100, len(losses))
+                    self.writer.add_scalar("train/loss", avg, step)
+                    self.writer.add_scalar("train/lr", self.optim.param_groups[0]["lr"], step)
+                    logger.info(f"[pretrain] step={step} loss={avg:.4f}")
 
-            if step % save_every == 0:
-                save_checkpoint(self.out_dir / f"checkpoints/step_{step}.pt", self.model, self.optim, step)
-                save_checkpoint(self.out_dir / f"checkpoints/latest.pt", self.model, self.optim, step)
+                if step % save_every == 0:
+                    save_checkpoint(self.out_dir / f"checkpoints/step_{step}.pt", self.model, self.optim, step)
+                    save_checkpoint(self.out_dir / f"checkpoints/latest.pt", self.model, self.optim, step)
 
-            if step >= self.optim_cfg.max_steps:
-                logger.info("Pretraining finished.")
-                break
+                if step >= self.optim_cfg.max_steps:
+                    break
+            logger.info(f"[pretrain] epoch={epoch} steps={step} (effective lr={self.optim.param_groups[0]['lr']:.2e})")
+        logger.info("Pretraining finished.")
