@@ -6,6 +6,8 @@ A pluggable, factory-mode project to reproduce GPT-1 style pretraining → finet
 - LSTM baseline (single-layer 2048) for ablation.
 - Auxiliary LM loss during finetuning (λ=0.5) switchable.
 - Transfer layers control: load first K layers from the pretrained checkpoint for finetuning ablation.
+- Immutable tokenizer artifacts: downstream runs reuse the exact pretraining token-id mapping and validate its SHA-256 fingerprint against the checkpoint.
+- GPT-1 task protocols with `_start_`, `_delimiter_`, `_classify_`, symmetric similarity traversal, and scalar candidate scoring.
 - Input formatting for NLI / QA / Paraphrase / Classification tasks (GLUE, RACE, StoryCloze).
 - Factory registries for datasets, models, trainers; YAML-configured experiments; Loguru + TensorBoard.
 
@@ -19,13 +21,14 @@ The repository's previous Pre-LN + final-LN + untied-output architecture is pres
 as `configs/model/gpt_modern_preln.yaml` so the architectural differences can be
 measured explicitly rather than hidden inside the implementation.
 
-Downstream training also uses the last valid token (or an explicit classify position)
-instead of a right-padding position, multiple-choice candidates receive one shared
-scalar score each, and partial transfer now truly limits loading to the first K
-Transformer blocks.
+Downstream training now inherits `runs/exp_pretrain_books/tokenizer` rather than
+training a task-local BPE. The tokenizer fingerprint is stored in pretraining
+checkpoints and validated before transfer. Task inputs use explicit `_classify_`
+positions; similarity tasks run both input orders and sum their representations;
+multiple-choice candidates receive one shared scalar score each.
 
-See `docs/PAPER_FIDELITY.md` for the current fidelity contract and the intentionally
-deferred follow-up work.
+See `docs/PAPER_FIDELITY.md` and `docs/TOKENIZER_TASK_PROTOCOL.md` for the current
+fidelity contract and migration notes.
 
 ```
 gpt1_ablation_factory/
@@ -72,6 +75,9 @@ gpt1_ablation_factory/
 │  │  ├─ datasets.py
 │  │  ├─ collators.py
 │  │  └─ text_bpe.py
+│  ├─ tokenization/
+│  │  ├─ artifact.py
+│  │  └─ special_tokens.py
 │  ├─ models/
 │  │  ├─ __init__.py
 │  │  ├─ gpt_decoder.py
@@ -82,6 +88,7 @@ gpt1_ablation_factory/
 │  ├─ tasks/
 │  │  ├─ __init__.py
 │  │  ├─ formatting.py
+│  │  ├─ protocol.py
 │  │  ├─ glue_taskmap.py
 │  │  └─ metrics.py
 │  ├─ trainers/
@@ -115,7 +122,7 @@ gpt1_ablation_factory/
 # 2) Pretrain (BooksCorpusOpen; BPE trained on-the-fly)
 /usr/bin/python3 -m gpt1_factory.cli.pretrain --cfg configs/pretrain_books.yaml
 
-# 3) Finetune on GLUE (e.g., MNLI)
+# 3) Finetune on GLUE (e.g., MNLI). This reuses the tokenizer artifact from step 2.
 /usr/bin/python3 -m gpt1_factory.cli.finetune --cfg configs/finetune_glue.yaml data.task=mnli
 
 # 4) Run ablations

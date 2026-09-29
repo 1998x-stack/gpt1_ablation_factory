@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 import torch
+
+from ..tokenization import TokenizerCompatibilityError
 
 
 _BLOCK_KEY = re.compile(r"(?:^|\.)blocks\.(\d+)\.")
@@ -16,13 +18,14 @@ def save_checkpoint(
     optim: Optional[torch.optim.Optimizer] = None,
     step: int = 0,
     extra_modules: Optional[Mapping[str, torch.nn.Module]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
 ) -> None:
-    """Persist the backbone plus optional task-specific modules."""
+    """Persist the backbone plus optional task modules and immutable metadata."""
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    obj = {
+    obj: dict[str, Any] = {
         "model": model.state_dict(),
         "step": step,
     }
@@ -33,6 +36,8 @@ def save_checkpoint(
             name: module.state_dict()
             for name, module in extra_modules.items()
         }
+    if metadata:
+        obj["metadata"] = dict(metadata)
 
     torch.save(obj, str(path))
 
@@ -41,11 +46,7 @@ def select_pretrained_state_dict(
     state: Mapping[str, torch.Tensor],
     transfer_layers: int,
 ) -> dict[str, torch.Tensor]:
-    """Select embeddings/shared weights plus the first K Transformer blocks.
-
-    transfer_layers=-1 loads the entire pretrained state. transfer_layers=0
-    transfers only non-block parameters such as token/position embeddings.
-    """
+    """Select embeddings/shared weights plus the first K Transformer blocks."""
 
     if transfer_layers < -1:
         raise ValueError("transfer_layers must be -1 or a non-negative integer.")
@@ -71,13 +72,8 @@ def _prepare_state_for_model(
     model: torch.nn.Module,
     state: Mapping[str, torch.Tensor],
 ) -> dict[str, torch.Tensor]:
-    """Resolve compatibility details before loading a selected state dict."""
-
     prepared = dict(state)
 
-    # Old repository checkpoints may contain independent token-embedding and
-    # LM-head weights. When the destination is paper-compatible and tied, load
-    # the token embeddings once and let the shared parameter serve both roles.
     if (
         getattr(model, "tie_emb", False)
         and "tok_emb.weight" in prepared
@@ -92,10 +88,26 @@ def load_pretrained_partial(
     model: torch.nn.Module,
     path: str | Path,
     transfer_layers: int = -1,
+    expected_tokenizer_fingerprint: str | None = None,
 ) -> dict[str, list[str]]:
-    """Load all pretrained weights or embeddings/shared weights plus first K blocks."""
+    """Load pretrained weights after validating tokenizer identity."""
 
     ckpt = torch.load(str(path), map_location="cpu")
+    metadata = ckpt.get("metadata", {})
+
+    if expected_tokenizer_fingerprint is not None:
+        actual = metadata.get("tokenizer_fingerprint")
+        if actual is None:
+            raise TokenizerCompatibilityError(
+                "Checkpoint has no tokenizer fingerprint. Re-run pretraining with "
+                "the tokenizer-artifact pipeline before paper-fidelity finetuning."
+            )
+        if actual != expected_tokenizer_fingerprint:
+            raise TokenizerCompatibilityError(
+                "Checkpoint/tokenizer mismatch: "
+                f"checkpoint={actual}, artifact={expected_tokenizer_fingerprint}"
+            )
+
     state = ckpt["model"]
     filtered = select_pretrained_state_dict(state, transfer_layers)
     prepared = _prepare_state_for_model(model, filtered)
