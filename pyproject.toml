@@ -11,6 +11,11 @@ requires-python = ">=3.10"
 authors = [{name = "Your Team"}]
 dependencies = []
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gpt1_factory*"]
+exclude = ["configs*", "tests*", "docs*"]
+
 [tool.setuptools.package-data]
 "gpt1_factory" = ["**/*.yaml"]
 
