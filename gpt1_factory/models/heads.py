@@ -11,27 +11,39 @@ def pool_sequence_state(
     attention_mask: Optional[torch.Tensor] = None,
     classify_positions: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    """Select the task representation from an encoded sequence.
-
-    Explicit classify positions take priority. Otherwise the last non-padding
-    token is used, which avoids silently pooling a right-padding position.
-    """
+    """Select an explicit GPT-1 classify state or the last valid token."""
 
     batch_size, seq_len, _ = last_hidden_state.shape
 
     if classify_positions is not None:
-        if classify_positions.ndim != 1 or classify_positions.size(0) != batch_size:
+        if (
+            classify_positions.ndim != 1
+            or classify_positions.size(0) != batch_size
+        ):
             raise ValueError("classify_positions must have shape [batch].")
-        if torch.any(classify_positions < 0) or torch.any(classify_positions >= seq_len):
-            raise ValueError("classify_positions contains an out-of-range index.")
+        if (
+            torch.any(classify_positions < 0)
+            or torch.any(classify_positions >= seq_len)
+        ):
+            raise ValueError(
+                "classify_positions contains an out-of-range index."
+            )
         positions = classify_positions.to(last_hidden_state.device)
     elif attention_mask is not None:
         if attention_mask.shape != last_hidden_state.shape[:2]:
-            raise ValueError("attention_mask must have shape [batch, sequence].")
-        indices = torch.arange(seq_len, device=last_hidden_state.device).unsqueeze(0)
+            raise ValueError(
+                "attention_mask must have shape [batch, sequence]."
+            )
+        indices = torch.arange(
+            seq_len,
+            device=last_hidden_state.device,
+        ).unsqueeze(0)
         positions = (
             indices.expand(batch_size, seq_len)
-            .masked_fill(attention_mask.to(last_hidden_state.device) == 0, -1)
+            .masked_fill(
+                attention_mask.to(last_hidden_state.device) == 0,
+                -1,
+            )
             .max(dim=-1)
             .values
             .clamp_min(0)
@@ -44,12 +56,15 @@ def pool_sequence_state(
             device=last_hidden_state.device,
         )
 
-    batch = torch.arange(batch_size, device=last_hidden_state.device)
+    batch = torch.arange(
+        batch_size,
+        device=last_hidden_state.device,
+    )
     return last_hidden_state[batch, positions]
 
 
 class ClassificationHead(nn.Module):
-    """Linear classifier over an explicit or last-valid sequence state."""
+    """Linear classifier over a GPT-1 task representation."""
 
     def __init__(
         self,
@@ -61,18 +76,21 @@ class ClassificationHead(nn.Module):
         self.drop = nn.Dropout(dropout)
         self.fc = nn.Linear(d_model, num_labels)
 
+    def score_pooled(self, pooled: torch.Tensor) -> torch.Tensor:
+        return self.fc(self.drop(pooled))
+
     def forward(
         self,
         last_hidden_state: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         classify_positions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        x = pool_sequence_state(
+        pooled = pool_sequence_state(
             last_hidden_state,
             attention_mask=attention_mask,
             classify_positions=classify_positions,
         )
-        return self.fc(self.drop(x))
+        return self.score_pooled(pooled)
 
 
 class ChoiceScoringHead(nn.Module):
