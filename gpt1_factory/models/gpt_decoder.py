@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from einops import rearrange
 
 from ..registry import MODELS
+from .heads import pool_sequence_state
 
 
 class GELU(nn.Module):
@@ -36,7 +37,8 @@ class CausalSelfAttention(nn.Module):
         self.head_dim = d_model // n_head
 
         self.qkv = nn.Linear(d_model, 3 * d_model)
-        self.d_proj = nn.Linear(d_model, d_model)
+        # Keep the historical key name so existing checkpoints remain loadable.
+        self.c_proj = nn.Linear(d_model, d_model)
         self.attn_drop = nn.Dropout(attn_dropout)
         self.resid_drop = nn.Dropout(resid_dropout)
 
@@ -50,7 +52,7 @@ class CausalSelfAttention(nn.Module):
         x: torch.Tensor,
         attn_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        B, T, C = x.size()
+        _, T, _ = x.size()
         qkv = self.qkv(x).chunk(3, dim=-1)
         q, k, v = [
             rearrange(t, "b t (h d) -> b h t d", h=self.n_head)
@@ -70,7 +72,7 @@ class CausalSelfAttention(nn.Module):
         att = self.attn_drop(att.softmax(dim=-1))
         y = att @ v
         y = rearrange(y, "b h t d -> b t (h d)")
-        return self.resid_drop(self.d_proj(y))
+        return self.resid_drop(self.c_proj(y))
 
 
 class Block(nn.Module):
@@ -201,7 +203,7 @@ class GPTDecoderLM(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
     ):
-        B, T = input_ids.shape
+        _, T = input_ids.shape
         if T > self.max_len:
             raise ValueError(
                 f"Sequence length {T} exceeds model max_len={self.max_len}."
@@ -233,7 +235,7 @@ class GPTDecoderLM(nn.Module):
 
 
 class GPTClassificationHead(nn.Module):
-    """Backward-compatible classification head using the last valid token."""
+    """Backward-compatible classifier using the last valid sequence state."""
 
     def __init__(
         self,
@@ -250,23 +252,8 @@ class GPTClassificationHead(nn.Module):
         last_hidden_state: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
     ):
-        if attention_mask is None:
-            x = last_hidden_state[:, -1, :]
-        else:
-            positions = (
-                torch.arange(
-                    last_hidden_state.size(1),
-                    device=last_hidden_state.device,
-                )
-                .unsqueeze(0)
-                .expand_as(attention_mask)
-                .masked_fill(attention_mask == 0, -1)
-                .max(dim=-1)
-                .values
-                .clamp_min(0)
-            )
-            x = last_hidden_state[
-                torch.arange(last_hidden_state.size(0), device=x_device := last_hidden_state.device),
-                positions,
-            ]
+        x = pool_sequence_state(
+            last_hidden_state,
+            attention_mask=attention_mask,
+        )
         return self.fc(self.drop(x))
