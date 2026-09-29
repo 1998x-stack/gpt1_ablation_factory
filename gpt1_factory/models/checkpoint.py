@@ -67,6 +67,27 @@ def select_pretrained_state_dict(
     return filtered
 
 
+def _prepare_state_for_model(
+    model: torch.nn.Module,
+    state: Mapping[str, torch.Tensor],
+) -> dict[str, torch.Tensor]:
+    """Resolve compatibility details before loading a selected state dict."""
+
+    prepared = dict(state)
+
+    # Old repository checkpoints may contain independent token-embedding and
+    # LM-head weights. When the destination is paper-compatible and tied, load
+    # the token embeddings once and let the shared parameter serve both roles.
+    if (
+        getattr(model, "tie_emb", False)
+        and "tok_emb.weight" in prepared
+        and "lm_head.weight" in prepared
+    ):
+        prepared.pop("lm_head.weight")
+
+    return prepared
+
+
 def load_pretrained_partial(
     model: torch.nn.Module,
     path: str | Path,
@@ -77,10 +98,11 @@ def load_pretrained_partial(
     ckpt = torch.load(str(path), map_location="cpu")
     state = ckpt["model"]
     filtered = select_pretrained_state_dict(state, transfer_layers)
+    prepared = _prepare_state_for_model(model, filtered)
 
-    incompatible = model.load_state_dict(filtered, strict=False)
+    incompatible = model.load_state_dict(prepared, strict=False)
     return {
-        "loaded_keys": sorted(filtered.keys()),
+        "loaded_keys": sorted(prepared.keys()),
         "missing_keys": list(incompatible.missing_keys),
         "unexpected_keys": list(incompatible.unexpected_keys),
     }
