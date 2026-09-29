@@ -1,39 +1,108 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Mapping, Optional
 
 import torch
 
 
-def save_checkpoint(path: str | Path, model: torch.nn.Module, optim: Optional[torch.optim.Optimizer] = None, step: int = 0) -> None:
+_BLOCK_KEY = re.compile(r"(?:^|\.)blocks\.(\d+)\.")
+
+
+def save_checkpoint(
+    path: str | Path,
+    model: torch.nn.Module,
+    optim: Optional[torch.optim.Optimizer] = None,
+    step: int = 0,
+    extra_modules: Optional[Mapping[str, torch.nn.Module]] = None,
+) -> None:
+    """Persist the backbone plus optional task-specific modules."""
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    obj = {"model": model.state_dict(), "step": step}
+
+    obj = {
+        "model": model.state_dict(),
+        "step": step,
+    }
     if optim is not None:
         obj["optim"] = optim.state_dict()
+    if extra_modules:
+        obj["modules"] = {
+            name: module.state_dict()
+            for name, module in extra_modules.items()
+        }
+
     torch.save(obj, str(path))
 
 
-def load_pretrained_partial(model: torch.nn.Module, path: str | Path, transfer_layers: int = -1) -> None:
-    """Partially load pretrained weights: only the first K layers (transfer_layers>0) or all (-1)."""
+def select_pretrained_state_dict(
+    state: Mapping[str, torch.Tensor],
+    transfer_layers: int,
+) -> dict[str, torch.Tensor]:
+    """Select embeddings/shared weights plus the first K Transformer blocks.
+
+    transfer_layers=-1 loads the entire pretrained state. transfer_layers=0
+    transfers only non-block parameters such as token/position embeddings.
+    """
+
+    if transfer_layers < -1:
+        raise ValueError("transfer_layers must be -1 or a non-negative integer.")
+
+    if transfer_layers == -1:
+        return dict(state)
+
+    filtered: dict[str, torch.Tensor] = {}
+    for key, value in state.items():
+        match = _BLOCK_KEY.search(key)
+        if match is None:
+            filtered[key] = value
+            continue
+
+        layer_idx = int(match.group(1))
+        if layer_idx < transfer_layers:
+            filtered[key] = value
+
+    return filtered
+
+
+def _prepare_state_for_model(
+    model: torch.nn.Module,
+    state: Mapping[str, torch.Tensor],
+) -> dict[str, torch.Tensor]:
+    """Resolve compatibility details before loading a selected state dict."""
+
+    prepared = dict(state)
+
+    # Old repository checkpoints may contain independent token-embedding and
+    # LM-head weights. When the destination is paper-compatible and tied, load
+    # the token embeddings once and let the shared parameter serve both roles.
+    if (
+        getattr(model, "tie_emb", False)
+        and "tok_emb.weight" in prepared
+        and "lm_head.weight" in prepared
+    ):
+        prepared.pop("lm_head.weight")
+
+    return prepared
+
+
+def load_pretrained_partial(
+    model: torch.nn.Module,
+    path: str | Path,
+    transfer_layers: int = -1,
+) -> dict[str, list[str]]:
+    """Load all pretrained weights or embeddings/shared weights plus first K blocks."""
+
     ckpt = torch.load(str(path), map_location="cpu")
     state = ckpt["model"]
-    if transfer_layers == -1:
-        model.load_state_dict(state, strict=False)
-        return
-    # filter only the first K layer weights
-    filtered = {}
-    for k, v in state.items():
-        if ".blocks." in k:
-            # parse layer number
-            try:
-                layer_idx = int(k.split(".blocks.")[1].split(".")[0])
-                if layer_idx < transfer_layers:
-                    filtered[k] = v
-            except Exception:
-                pass
-        else:
-            # keep shared layers (embedding/pos_emb/ln_f etc)
-            filtered[k] = v
-    model.load_state_dict(filtered, strict=False)
+    filtered = select_pretrained_state_dict(state, transfer_layers)
+    prepared = _prepare_state_for_model(model, filtered)
+
+    incompatible = model.load_state_dict(prepared, strict=False)
+    return {
+        "loaded_keys": sorted(prepared.keys()),
+        "missing_keys": list(incompatible.missing_keys),
+        "unexpected_keys": list(incompatible.unexpected_keys),
+    }

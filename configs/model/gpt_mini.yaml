@@ -10,5 +10,7 @@ model:
   attn_dropout: 0.1
   resid_dropout: 0.1
   layer_norm_eps: 1.0e-5
-  tie_emb: false
+  tie_emb: true
+  norm_style: post_ln
+  final_layer_norm: false
   gelu: true

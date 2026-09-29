@@ -2,11 +2,30 @@
 
 A pluggable, factory-mode project to reproduce GPT-1 style pretraining → finetuning → ablation:
 - Decoder-only Transformer (12L, 768H, 12 heads, FFN 3072) with GELU, learned pos-emb.
+- GPT-1 paper-compatible defaults: Post-LN blocks, tied token/output embeddings, no extra final LayerNorm.
 - LSTM baseline (single-layer 2048) for ablation.
 - Auxiliary LM loss during finetuning (λ=0.5) switchable.
 - Transfer layers control: load first K layers from the pretrained checkpoint for finetuning ablation.
 - Input formatting for NLI / QA / Paraphrase / Classification tasks (GLUE, RACE, StoryCloze).
 - Factory registries for datasets, models, trainers; YAML-configured experiments; Loguru + TensorBoard.
+
+## Paper fidelity vs modern ablation
+
+The canonical `configs/model/gpt_small.yaml` follows the GPT-1 reference architecture
+more closely: Post-LayerNorm residual blocks, tied token/output embeddings, and no
+extra final LayerNorm after the last Transformer block.
+
+The repository's previous Pre-LN + final-LN + untied-output architecture is preserved
+as `configs/model/gpt_modern_preln.yaml` so the architectural differences can be
+measured explicitly rather than hidden inside the implementation.
+
+Downstream training also uses the last valid token (or an explicit classify position)
+instead of a right-padding position, multiple-choice candidates receive one shared
+scalar score each, and partial transfer now truly limits loading to the first K
+Transformer blocks.
+
+See `docs/PAPER_FIDELITY.md` for the current fidelity contract and the intentionally
+deferred follow-up work.
 
 ```
 gpt1_ablation_factory/
@@ -22,6 +41,7 @@ gpt1_ablation_factory/
 │  ├─ model/
 │  │  ├─ gpt_mini.yaml
 │  │  ├─ gpt_small.yaml
+│  │  ├─ gpt_modern_preln.yaml
 │  │  └─ lstm_baseline.yaml
 │  └─ data/
 │     ├─ books_corpus_open.yaml
@@ -76,6 +96,7 @@ gpt1_ablation_factory/
 │     ├─ download.py
 │     └─ run_ablation.py
 └─ tests/
+   ├─ paper_contract/
    ├─ test_tokenizer.py
    ├─ test_models.py
    ├─ test_collators.py

@@ -1,0 +1,18 @@
+# Modernized decoder variant preserving the repository's previous architecture.
+# Use this for explicit Post-LN vs Pre-LN / tied-vs-untied ablations.
+model:
+  name: gpt_decoder
+  vocab_size: 50257
+  n_layer: 12
+  n_head: 12
+  d_model: 768
+  d_ff: 3072
+  max_len: 512
+  dropout: 0.1
+  attn_dropout: 0.1
+  resid_dropout: 0.1
+  layer_norm_eps: 1.0e-5
+  tie_emb: false
+  norm_style: pre_ln
+  final_layer_norm: true
+  gelu: true
