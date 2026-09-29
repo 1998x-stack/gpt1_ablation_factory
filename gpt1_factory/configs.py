@@ -7,22 +7,16 @@ from typing import Any, Dict, Optional
 
 @dataclass
 class ExpConfig:
-    """Experiment-level configuration.
+    """Experiment-level configuration."""
 
-    Attributes:
-        out_dir: Output directory.
-        seed: Random seed.
-    """
     out_dir: str
     seed: int = 42
 
 
 @dataclass
 class OptimConfig:
-    """Optimizer/training schedule config for pretraining.
+    """Optimizer/training schedule config for pretraining."""
 
-    Per the paper: Adam + 2000 warmup steps + cosine decay.
-    """
     lr: float = 2.5e-4
     betas: tuple[float, float] = (0.9, 0.95)
     weight_decay: float = 0.01
@@ -35,20 +29,8 @@ class OptimConfig:
 
 @dataclass
 class FinetuneConfig:
-    """Finetuning config.
+    """Finetuning config."""
 
-    Attributes:
-        pretrained_path: Path to pretrained weights; empty means train from scratch.
-        aux_lm_lambda: Auxiliary LM loss weight (λ); paper suggests 0.5.
-        epochs: Number of training epochs; paper commonly uses 3.
-        lr: Finetuning learning rate; paper 6.25e-5.
-        warmup_ratio: Linear warmup ratio (e.g. 0.002 = 0.2%).
-        weight_decay: AdamW weight decay.
-        grad_clip: Gradient clipping threshold.
-        amp: Whether mixed precision is enabled.
-        transfer_layers: Number of layers transferred from pretraining; -1 means all.
-        head_dropout: Classification head dropout.
-    """
     pretrained_path: str = ""
     aux_lm_lambda: float = 0.5
     epochs: int = 3
@@ -64,6 +46,7 @@ class FinetuneConfig:
 @dataclass
 class DataConfig:
     """Data config shared by modules."""
+
     name: str
     batch_size: int
     num_workers: int = 4
@@ -79,7 +62,12 @@ class DataConfig:
 
 @dataclass
 class ModelConfig:
-    """Model architecture config."""
+    """Model architecture config.
+
+    Defaults intentionally match the GPT-1 reference architecture: Post-LN,
+    no extra final LayerNorm, and tied token/output embeddings.
+    """
+
     name: str
     vocab_size: int = 50257
     n_layer: int | None = None
@@ -91,8 +79,10 @@ class ModelConfig:
     attn_dropout: float = 0.1
     resid_dropout: float = 0.1
     layer_norm_eps: float = 1e-5
-    tie_emb: bool = False
+    tie_emb: bool = True
     gelu: bool = True
+    norm_style: str = "post_ln"
+    final_layer_norm: bool = False
     lstm_hidden: int | None = None
     num_layers: int | None = None
 
@@ -100,12 +90,14 @@ class ModelConfig:
 @dataclass
 class CheckpointConfig:
     """Checkpoint saving behavior."""
+
     save_every: int = 10_000
     keep_last: int = 5
 
 
 def dataclass_from_dict(dc_cls, d: dict):
-    """Recursively map a dict onto a dataclass."""
-    fieldset = {f.name for f in dataclasses.fields(dc_cls)}
-    kwargs = {k: v for k, v in d.items() if k in fieldset}
+    """Map a dict onto a dataclass, ignoring unknown keys."""
+
+    fieldset = {field.name for field in dataclasses.fields(dc_cls)}
+    kwargs = {key: value for key, value in d.items() if key in fieldset}
     return dc_cls(**kwargs)
