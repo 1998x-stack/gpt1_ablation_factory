@@ -19,10 +19,14 @@ jobs:
           python-version: "3.10"
           cache: "pip"
 
-      - name: Install test dependencies
+      - name: Install CPU PyTorch
         run: |
           python -m pip install --upgrade pip
-          python -m pip install torch tokenizers datasets scikit-learn numpy scipy loguru tensorboard pyyaml einops pytest
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.2.2
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install             tokenizers==0.15.2             datasets==2.20.0             scikit-learn==1.4.2             numpy==1.26.4             scipy==1.12.0             loguru==0.7.2             tensorboard==2.16.2             pyyaml==6.0.1             einops==0.7.0             pytest==8.3.5
           python -m pip install -e . --no-deps
 
       - name: Run test suite
