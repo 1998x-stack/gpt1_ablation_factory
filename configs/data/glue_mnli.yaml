@@ -4,4 +4,5 @@ data:
   task: "mnli"
   max_len: 256
   batch_size: 32
-  num_workers: 2   # was 4
+  num_workers: 2
+  tokenizer_artifact: "runs/exp_pretrain_books/tokenizer"
