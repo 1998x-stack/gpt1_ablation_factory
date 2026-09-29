@@ -101,8 +101,8 @@ def load_cfg_with_overrides(
     overrides: List[str],
 ) -> Dict[str, Any]:
     cfg = _load_yaml(path)
-    cfg = _override_cfg(cfg, overrides)
     cfg = _apply_includes(cfg)
+    cfg = _override_cfg(cfg, overrides)
     _ensure_finetune_data_defaults(cfg)
     return cfg
 
