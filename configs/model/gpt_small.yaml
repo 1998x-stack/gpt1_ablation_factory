@@ -1,6 +1,6 @@
 model:
   name: gpt_decoder
-  vocab_size: 50257           # 若使用自训练BPE会被覆盖
+  vocab_size: 50257           # overridden by trained tokenizer
   n_layer: 12
   n_head: 12
   d_model: 768
@@ -10,5 +10,7 @@ model:
   attn_dropout: 0.1
   resid_dropout: 0.1
   layer_norm_eps: 1.0e-5
-  tie_emb: false
+  tie_emb: true
+  norm_style: post_ln
+  final_layer_norm: false
   gelu: true
