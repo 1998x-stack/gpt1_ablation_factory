@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "fix/**"
+      - "feat/**"
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch tokenizers datasets scikit-learn numpy scipy loguru tensorboard pyyaml einops pytest
+          python -m pip install -e . --no-deps
+
+      - name: Run test suite
+        run: python -m pytest -q
