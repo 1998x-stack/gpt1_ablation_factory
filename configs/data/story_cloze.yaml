@@ -3,3 +3,4 @@ data:
   max_len: 256
   batch_size: 16
   num_workers: 4
+  tokenizer_artifact: "runs/exp_pretrain_books/tokenizer"

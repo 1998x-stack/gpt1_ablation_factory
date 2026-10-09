@@ -19,7 +19,7 @@ from ..tasks.metrics import compute_metrics
 
 
 class FinetuneTrainer:
-    """Unified finetuning trainer with auxiliary LM and transfer-depth control."""
+    """Unified GPT-1 finetuning trainer."""
 
     def __init__(
         self,
@@ -30,6 +30,7 @@ class FinetuneTrainer:
         train_loader: DataLoader,
         valid_loader: Optional[DataLoader],
         task_name: str,
+        tokenizer_fingerprint: str | None = None,
     ) -> None:
         self.exp = exp
         self.cfg = cfg
@@ -38,8 +39,11 @@ class FinetuneTrainer:
         self.train_loader = train_loader
         self.valid_loader = valid_loader
         self.task_name = task_name
+        self.tokenizer_fingerprint = tokenizer_fingerprint
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
         self.backbone.to(self.device)
 
         if hasattr(backbone, "d_model"):
@@ -64,6 +68,7 @@ class FinetuneTrainer:
                 self.backbone,
                 cfg.pretrained_path,
                 cfg.transfer_layers,
+                expected_tokenizer_fingerprint=tokenizer_fingerprint,
             )
             logger.info(
                 "[finetune] loaded {} pretrained tensors; {} missing",
@@ -89,8 +94,6 @@ class FinetuneTrainer:
         def lr_lambda(step: int) -> float:
             if step < warmup_steps:
                 return float(step + 1) / float(warmup_steps)
-
-            # GPT-1 fine-tuning uses a warmup followed by linear decay.
             remaining = max(0, total_steps - step)
             decay_steps = max(1, total_steps - warmup_steps)
             return float(remaining) / float(decay_steps)
@@ -114,7 +117,10 @@ class FinetuneTrainer:
                 if attention_mask is not None
                 else None
             )
-            out = self.backbone(input_ids=x, attention_mask=attn)
+            out = self.backbone(
+                input_ids=x,
+                attention_mask=attn,
+            )
             return out, (B, C, L)
 
         out = self.backbone(
@@ -128,6 +134,7 @@ class FinetuneTrainer:
         last_hidden_state: torch.Tensor,
         shape_tuple: tuple[int, int, int],
         attention_mask: Optional[torch.Tensor],
+        classify_positions: Optional[torch.Tensor],
     ) -> torch.Tensor:
         B, C, L = shape_tuple
         flat_mask = (
@@ -135,12 +142,93 @@ class FinetuneTrainer:
             if attention_mask is not None
             else None
         )
+        flat_positions = (
+            classify_positions.view(B * C)
+            if classify_positions is not None
+            else None
+        )
         pooled = pool_sequence_state(
             last_hidden_state,
             attention_mask=flat_mask,
+            classify_positions=flat_positions,
         )
         pooled = pooled.view(B, C, pooled.size(-1))
         return self.choice_head(pooled)
+
+    def _logits_for_similarity(
+        self,
+        last_hidden_state: torch.Tensor,
+        shape_tuple: tuple[int, int, int],
+        attention_mask: Optional[torch.Tensor],
+        classify_positions: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        B, C, L = shape_tuple
+        if C != 2:
+            raise ValueError(
+                "Similarity protocol expects exactly two traversal orders."
+            )
+
+        flat_mask = (
+            attention_mask.view(B * C, L)
+            if attention_mask is not None
+            else None
+        )
+        flat_positions = (
+            classify_positions.view(B * C)
+            if classify_positions is not None
+            else None
+        )
+        pooled = pool_sequence_state(
+            last_hidden_state,
+            attention_mask=flat_mask,
+            classify_positions=flat_positions,
+        )
+        combined = pooled.view(B, C, pooled.size(-1)).sum(dim=1)
+        return self.cls_head.score_pooled(combined)
+
+    def _supervised_logits(
+        self,
+        batch: dict[str, torch.Tensor],
+        out,
+        shape_tuple: tuple[int, int, int] | None,
+    ) -> torch.Tensor:
+        if "similarity_pairs" in batch:
+            if shape_tuple is None:
+                raise ValueError(
+                    "Similarity protocol must provide rank-3 input_ids."
+                )
+            return self._logits_for_similarity(
+                out["last_hidden_state"],
+                shape_tuple,
+                batch.get("attention_mask"),
+                batch.get("classify_positions"),
+            )
+
+        if shape_tuple is not None:
+            return self._logits_for_mc(
+                out["last_hidden_state"],
+                shape_tuple,
+                batch.get("attention_mask"),
+                batch.get("classify_positions"),
+            )
+
+        return self.cls_head(
+            out["last_hidden_state"],
+            batch.get("attention_mask"),
+            batch.get("classify_positions"),
+        )
+
+    def _classification_loss(
+        self,
+        logits: torch.Tensor,
+        labels: torch.Tensor,
+    ) -> torch.Tensor:
+        if self._is_regression:
+            return F.mse_loss(
+                logits.squeeze(-1),
+                labels.float(),
+            )
+        return F.cross_entropy(logits, labels)
 
     def train(self) -> Tuple[float, dict]:
         global_step = 0
@@ -163,38 +251,24 @@ class FinetuneTrainer:
                         batch["input_ids"],
                         batch.get("attention_mask"),
                     )
-
-                    if shape_tuple is not None:
-                        logits = self._logits_for_mc(
-                            out["last_hidden_state"],
-                            shape_tuple,
-                            batch.get("attention_mask"),
+                    logits = self._supervised_logits(
+                        batch,
+                        out,
+                        shape_tuple,
+                    )
+                    if "labels" not in batch:
+                        raise ValueError(
+                            "Training batch is missing supervised labels."
                         )
-                        loss_cls = (
-                            F.cross_entropy(logits, batch["labels"])
-                            if "labels" in batch
-                            else logits.mean() * 0.0
-                        )
-                    else:
-                        logits = self.cls_head(
-                            out["last_hidden_state"],
-                            batch.get("attention_mask"),
-                            batch.get("classify_positions"),
-                        )
-                        if self._is_regression:
-                            loss_cls = F.mse_loss(
-                                logits.squeeze(-1),
-                                batch["labels"].float(),
-                            )
-                        else:
-                            loss_cls = F.cross_entropy(
-                                logits,
-                                batch["labels"],
-                            )
+                    loss = self._classification_loss(
+                        logits,
+                        batch["labels"],
+                    )
 
-                    loss = loss_cls
-
-                    if self.cfg.aux_lm_lambda > 0.0 and "labels_lm" in batch:
+                    if (
+                        self.cfg.aux_lm_lambda > 0.0
+                        and "labels_lm" in batch
+                    ):
                         lm_ids = batch["input_ids"]
                         lm_lbl = batch["labels_lm"]
                         lm_attn = batch.get("attention_mask")
@@ -242,6 +316,13 @@ class FinetuneTrainer:
             if metric_val > best_metric:
                 best_metric = metric_val
                 best_detail = detail
+                metadata = (
+                    {
+                        "tokenizer_fingerprint": self.tokenizer_fingerprint
+                    }
+                    if self.tokenizer_fingerprint
+                    else None
+                )
                 save_checkpoint(
                     Path(self.exp.out_dir) / "checkpoints/best.pt",
                     self.backbone,
@@ -251,6 +332,7 @@ class FinetuneTrainer:
                         "classification_head": self.cls_head,
                         "choice_head": self.choice_head,
                     },
+                    metadata=metadata,
                 )
 
         return best_metric, best_detail
@@ -258,7 +340,9 @@ class FinetuneTrainer:
     @torch.no_grad()
     def evaluate(self) -> tuple[float, dict]:
         if self.valid_loader is None:
-            raise ValueError("FinetuneTrainer requires a validation dataloader.")
+            raise ValueError(
+                "FinetuneTrainer requires a validation dataloader."
+            )
 
         self.backbone.eval()
         self.cls_head.eval()
@@ -274,25 +358,16 @@ class FinetuneTrainer:
                 batch["input_ids"],
                 batch.get("attention_mask"),
             )
-
-            if shape_tuple is not None:
-                logits = self._logits_for_mc(
-                    out["last_hidden_state"],
-                    shape_tuple,
-                    batch.get("attention_mask"),
-                )
-                pred = torch.argmax(logits, dim=-1)
-            else:
-                logits = self.cls_head(
-                    out["last_hidden_state"],
-                    batch.get("attention_mask"),
-                    batch.get("classify_positions"),
-                )
-                pred = (
-                    logits.squeeze(-1)
-                    if self._is_regression
-                    else torch.argmax(logits, dim=-1)
-                )
+            logits = self._supervised_logits(
+                batch,
+                out,
+                shape_tuple,
+            )
+            pred = (
+                logits.squeeze(-1)
+                if self._is_regression
+                else torch.argmax(logits, dim=-1)
+            )
 
             if "labels" in batch:
                 ys.extend(batch["labels"].cpu().tolist())
