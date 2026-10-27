@@ -53,16 +53,29 @@ def aggregate(rows: list[dict]) -> list[dict]:
 
 
 def paired_deltas(rows: list[dict], base: str = "full") -> list[dict]:
-    """Difference to control only for matched (suite, task, seed, depth, lambda)."""
-    lookups = {(r["suite"], r["variant"], r["task"], r["seed"], r["depth"], r["lambda"]): r
-               for r in rows}
+    """Paired contrast against full, matching task/seed/depth.
+
+    Treatment variables (e.g., auxiliary LM weight or model family) MUST be
+    allowed to differ; otherwise no_aux runs could never pair to full.
+    If several full controls match the same experiment stratum, omit ambiguity.
+    """
+    controls = defaultdict(list)
+    for r in rows:
+        if r["variant"] == base:
+            controls[(r["suite"], r["task"], r["seed"], r["depth"])].append(r)
     deltas = defaultdict(list)
     for r in rows:
         if r["variant"] == base:
             continue
-        ref = lookups.get((r["suite"], base, r["task"], r["seed"], r["depth"], r["lambda"]))
-        if ref and ref["metric"] == r["metric"]:
-            deltas[(r["suite"], r["variant"], r["task"], r["metric"])].append(r["score"] - ref["score"])
+        matches = controls.get((r["suite"], r["task"], r["seed"], r["depth"]), [])
+        if len(matches) != 1:
+            continue
+        ref = matches[0]
+        if ref["metric"] != r["metric"]:
+            continue
+        deltas[(r["suite"], r["variant"], r["task"], r["metric"])].append(
+            r["score"] - ref["score"]
+        )
     return [{"suite": k[0], "variant": k[1], "task": k[2], "metric": k[3],
              "n_pairs": len(v), "delta_mean": statistics.mean(v),
              "delta_std": statistics.stdev(v) if len(v) > 1 else None}
@@ -123,7 +136,7 @@ table tr:hover{background:#f5f5f5}
 <label>Task <select id="task"></select></label>
 <h2>Group comparison</h2><div id="plot"></div>
 <h2>Paired differences to full</h2>
-<p><small>Only trials sharing task, seed, depth and LM weight are paired.</small></p>
+<p><small>Only trials sharing task, seed and transfer depth are paired; LM weight is an experimental treatment.</small></p>
 <div id="deltas"></div>
 <script>
 const stats = """ + stats_json + """;

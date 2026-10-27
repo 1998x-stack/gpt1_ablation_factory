@@ -56,3 +56,14 @@ def test_matched_delta_avoids_unpaired_seeds():
     assert len(difference) == 1
     assert difference[0]["n_pairs"] == 1
     assert difference[0]["delta_mean"] == pytest.approx(-0.3)
+
+
+def test_auxiliary_treatment_pairs_even_when_lambda_changes():
+    rows = [
+        {"suite": "paper_table5", "variant": name, "task": "sst2",
+         "seed": 13, "depth": -1, "lambda": lam, "metric": "acc", "score": score}
+        for name, lam, score in [("full", 0.5, 0.80), ("no_aux", 0.0, 0.77)]
+    ]
+    pair = paired_deltas(rows)
+    assert len(pair) == 1 and pair[0]["n_pairs"] == 1
+    assert pair[0]["delta_mean"] == pytest.approx(-0.03)

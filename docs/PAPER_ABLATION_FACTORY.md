@@ -107,3 +107,10 @@ python -m gpt1_factory.cli.zero_shot_race \\
 
 `experiments/plots.py` 绘制按任务分开的 Table 5 比较柱状图（可显示跨种子 SD）与
 Fig.2(left) 迁移深度曲线；`dashboard.html` 提供离线筛选表。跨任务的指标不叠在同一数值坐标上。
+
+## 8. 配对统计口径
+
+配对分析固定 `suite/task/seed/transfer depth`，将 `aux_lm_lambda` 及架构类型
+视作允许改变的处理变量。否则 “no_aux vs full” 因 λ 不同而无法比较。
+如控制组重复或指标类型不一致则拒绝生成不可靠的配对差值。
+目前显示的是差值均值与样本 SD，不是显著性检验或置信区间。

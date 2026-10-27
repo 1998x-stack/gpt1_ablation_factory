@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
+from ..configs import DataConfig, ExpConfig, FinetuneConfig, ModelConfig
+from dataclasses import fields
 
 ROOT = Path(__file__).resolve().parents[2]
 SAFE_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
@@ -138,6 +140,16 @@ def build_plan(spec_path: str | Path) -> list[Job]:
                         "transfer_layers": int(depth),
                     },
                 })
+                for section, schema in (
+                    ("exp", ExpConfig), ("data", DataConfig),
+                    ("finetune", FinetuneConfig), ("model", ModelConfig),
+                ):
+                    valid = {f.name for f in fields(schema)}
+                    unknown = set(cfg.get(section, {})) - valid
+                    if unknown:
+                        raise ValueError(
+                            f"Unknown {section} configuration keys for {tag}: {sorted(unknown)}"
+                        )
                 digest = _digest(cfg)
                 jobs.append(Job(tag, suite_id, arm_id, task, int(seed),
                                 runs_dir / tag, cfg, digest))
