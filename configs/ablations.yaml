@@ -1,30 +1,17 @@
-# 统一控制若干组消融实验
-ablations:
-  - name: full_gpt_with_aux_lm
-    finetune_cfg: "configs/finetune_glue.yaml"
-    overrides:
-      finetune.aux_lm_lambda: 0.5
-      finetune.transfer_layers: -1
-
-  - name: no_pretrain_random_init
-    finetune_cfg: "configs/finetune_glue.yaml"
-    overrides:
-      finetune.pretrained_path: ""
-      finetune.aux_lm_lambda: 0.5
-
-  - name: no_aux_lm
-    finetune_cfg: "configs/finetune_glue.yaml"
-    overrides:
-      finetune.aux_lm_lambda: 0.0
-
-  - name: transfer_first_6_layers
-    finetune_cfg: "configs/finetune_glue.yaml"
-    overrides:
-      finetune.transfer_layers: 6
-      finetune.aux_lm_lambda: 0.5
-
-  - name: lstm_baseline
-    finetune_cfg: "configs/finetune_glue.yaml"
-    model_cfg: "configs/model/lstm_baseline.yaml"
-    overrides:
-      finetune.aux_lm_lambda: 0.5
+# Compact local smoke matrix; use paper_ablations.yaml for full research.
+schema_version: 1
+base_config: configs/finetune_glue.yaml
+default_model_config: configs/model/gpt_mini.yaml
+runs_dir: runs/smoke_ablations
+tokenizer_artifact: runs/exp_local/tokenizer
+pretrained_path: runs/exp_local/checkpoints/latest.pt
+suites:
+  - id: smoke
+    tasks: [sst2]
+    seeds: [42]
+    variants:
+      - id: full
+      - id: no_pretrain
+        no_pretrain: true
+      - id: no_aux
+        aux_lm_lambda: [0.0]

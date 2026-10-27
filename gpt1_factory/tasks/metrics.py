@@ -14,7 +14,7 @@ def compute_metrics(task: str, y_true: Sequence, y_pred: Sequence) -> Dict[str, 
     - CoLA: Matthews correlation
     - STS-B: Pearson & Spearman (y_pred should be continuous regression outputs)
     """
-    if task in ("sst2", "mnli"):
+    if task in ("sst2", "mnli", "qnli", "rte", "race", "story_cloze"):
         return {"acc": float(accuracy_score(y_true, y_pred))}
     if task in ("mrpc", "qqp"):
         return {

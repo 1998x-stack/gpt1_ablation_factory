@@ -128,7 +128,7 @@ def _require_inherited_tokenizer(tokenizer: Any, dataset_name: str):
 
 
 @DATASETS.register("local_text")
-def load_local_text(cfg: DataConfig) -> DatasetBundle:
+def load_local_text(cfg: DataConfig, tokenizer=None) -> DatasetBundle:
     text_dir = Path(
         cfg.local_text_dir or "gpt1_ablation_factory/data/text"
     )
@@ -156,7 +156,7 @@ def load_local_text(cfg: DataConfig) -> DatasetBundle:
         bpe_cfg.get("vocab_size", 4000),
         bpe_cfg.get("min_freq", 2),
     )
-    tok = builder.load_or_train(_text_iter(raw, None))
+    tok = tokenizer if tokenizer is not None else builder.load_or_train(_text_iter(raw, None))
     collator = LMTrainCollator(
         tok,
         seq_len=cfg.seq_len or 256,
@@ -171,7 +171,7 @@ def load_local_text(cfg: DataConfig) -> DatasetBundle:
 
 
 @DATASETS.register("bookcorpusopen")
-def load_bookcorpusopen(cfg: DataConfig) -> DatasetBundle:
+def load_bookcorpusopen(cfg: DataConfig, tokenizer=None) -> DatasetBundle:
     try:
         raw = datasets.load_dataset(
             "bookcorpusopen",
@@ -190,7 +190,7 @@ def load_bookcorpusopen(cfg: DataConfig) -> DatasetBundle:
         cfg.bpe.get("vocab_size", 40000) if cfg.bpe else 40000,
         cfg.bpe.get("min_freq", 2) if cfg.bpe else 2,
     )
-    tok = builder.load_or_train(_text_iter(raw))
+    tok = tokenizer if tokenizer is not None else builder.load_or_train(_text_iter(raw))
     collator = LMTrainCollator(
         tok,
         seq_len=cfg.seq_len or 512,
@@ -226,14 +226,14 @@ def load_glue(
             return_lm_labels=True,
             mode="classification",
         )
-    elif task == "mnli":
-        text_cols, num_labels = ("premise", "hypothesis"), 3
+    elif task in ("mnli", "qnli", "rte"):
+        columns = {"mnli": ("premise", "hypothesis"),
+                   "qnli": ("question", "sentence"),
+                   "rte": ("sentence1", "sentence2")}
+        text_cols, num_labels = columns[task], 3 if task == "mnli" else 2
         collator = ClassificationCollator(
-            tok,
-            max_len=cfg.max_len or 256,
-            text_cols=text_cols,
-            return_lm_labels=True,
-            mode="entailment",
+            tok, max_len=cfg.max_len or 256, text_cols=text_cols,
+            return_lm_labels=True, mode="entailment",
         )
     elif task in ("mrpc", "qqp"):
         text_cols, num_labels = ("sentence1", "sentence2"), 2
@@ -262,14 +262,7 @@ def load_glue(
             mode="classification",
         )
     else:
-        text_cols, num_labels = ("sentence", None), 2
-        collator = ClassificationCollator(
-            tok,
-            max_len=cfg.max_len or 256,
-            text_cols=text_cols,
-            return_lm_labels=True,
-            mode="classification",
-        )
+        raise ValueError(f"Unsupported GLUE task protocol: {task}")
 
     valid_split = (
         raw["validation_matched"]

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import math
 from typing import Optional, Tuple
 
 import torch
@@ -16,6 +18,7 @@ from ..models.heads import (
     pool_sequence_state,
 )
 from ..tasks.metrics import compute_metrics
+from ..utils.tensorboard import create_tb_writer
 
 
 class FinetuneTrainer:
@@ -34,6 +37,10 @@ class FinetuneTrainer:
     ) -> None:
         self.exp = exp
         self.cfg = cfg
+        self.out_dir = Path(exp.out_dir)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.event_file = self.out_dir / 'events.jsonl'
+        self.writer = create_tb_writer(self.out_dir)
         self.backbone = backbone
         self.num_labels = num_labels
         self.train_loader = train_loader
@@ -103,6 +110,10 @@ class FinetuneTrainer:
             lr_lambda=lr_lambda,
         )
         self._is_regression = self.num_labels == 1
+
+    def _event(self, **event) -> None:
+        with self.event_file.open('a', encoding='utf-8') as handle:
+            handle.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + '\\n')
 
     def _forward_backbone(
         self,
@@ -260,39 +271,27 @@ class FinetuneTrainer:
                         raise ValueError(
                             "Training batch is missing supervised labels."
                         )
-                    loss = self._classification_loss(
-                        logits,
-                        batch["labels"],
+                    supervised_loss = self._classification_loss(logits, batch["labels"])
+                    lm_loss = None
+                    if self.cfg.aux_lm_lambda > 0:
+                        if "labels_lm" not in batch:
+                            raise ValueError("Auxiliary LM enabled but labels_lm is missing")
+                        lm_logits = out["logits"]
+                        labels_lm = batch["labels_lm"]
+                        if labels_lm.ne(-100).sum().item() == 0:
+                            raise ValueError("Auxiliary LM has no non-padding targets")
+                        lm_loss = F.cross_entropy(
+                            lm_logits.reshape(-1, lm_logits.size(-1)),
+                            labels_lm.reshape(-1),
+                            ignore_index=-100,
+                        )
+                    loss = supervised_loss + (
+                        self.cfg.aux_lm_lambda * lm_loss if lm_loss is not None else 0.0
                     )
-
-                    if (
-                        self.cfg.aux_lm_lambda > 0.0
-                        and "labels_lm" in batch
-                    ):
-                        lm_ids = batch["input_ids"]
-                        lm_lbl = batch["labels_lm"]
-                        lm_attn = batch.get("attention_mask")
-
-                        if lm_ids.dim() == 3:
-                            B, C, L = lm_ids.shape
-                            lm_ids = lm_ids.view(B * C, L)
-                            lm_lbl = lm_lbl.view(B * C, L)
-                            if lm_attn is not None:
-                                lm_attn = lm_attn.view(B * C, L)
-
-                        lm_out = self.backbone(
-                            input_ids=lm_ids,
-                            attention_mask=lm_attn,
-                            labels=lm_lbl,
-                        )
-                        loss = (
-                            loss
-                            + self.cfg.aux_lm_lambda * lm_out["loss"]
-                        )
 
                 self.scaler.scale(loss).backward()
                 self.scaler.unscale_(self.optim)
-                torch.nn.utils.clip_grad_norm_(
+                grad_norm = torch.nn.utils.clip_grad_norm_(
                     self._trainable_params,
                     self.cfg.grad_clip,
                 )
@@ -302,6 +301,16 @@ class FinetuneTrainer:
                 self.scheduler.step()
 
                 global_step += 1
+                if not math.isfinite(float(loss.detach().item())):
+                    raise FloatingPointError("Non-finite finetuning loss")
+                self._event(kind="train", epoch=epoch, step=global_step,
+                            loss=float(loss.detach().item()),
+                            supervised_loss=float(supervised_loss.detach().item()),
+                            aux_lm_loss=float(lm_loss.detach().item()) if lm_loss is not None else None,
+                            grad_norm=float(grad_norm.detach().item()),
+                            lr=float(self.optim.param_groups[0]["lr"]))
+                self.writer.add_scalar("train/loss", float(loss.detach().item()), global_step)
+                self.writer.add_scalar("train/grad_norm", float(grad_norm.detach().item()), global_step)
                 if global_step % 50 == 0:
                     lr = self.optim.param_groups[0]["lr"]
                     logger.info(
@@ -313,9 +322,17 @@ class FinetuneTrainer:
                     )
 
             metric_val, detail = self.evaluate()
+            self._event(kind="validation", epoch=epoch, step=global_step,
+                        score=metric_val, metrics=detail)
+            self.writer.add_scalar("validation/primary", metric_val, global_step)
             if metric_val > best_metric:
                 best_metric = metric_val
                 best_detail = detail
+                (self.out_dir / "metrics.json").write_text(
+                    json.dumps({"task": self.task_name, "primary_metric": self._primary_name(),
+                                "score": best_metric, "metrics": best_detail,
+                                "best_epoch": epoch, "step": global_step},
+                               indent=2, allow_nan=False), encoding="utf-8")
                 metadata = (
                     {
                         "tokenizer_fingerprint": self.tokenizer_fingerprint
@@ -335,7 +352,13 @@ class FinetuneTrainer:
                     metadata=metadata,
                 )
 
+        self.writer.flush()
+        self.writer.close()
         return best_metric, best_detail
+
+    def _primary_name(self) -> str:
+        return {"cola": "matthews", "mrpc": "f1", "qqp": "f1",
+                "stsb": "pearson"}.get(self.task_name, "acc")
 
     @torch.no_grad()
     def evaluate(self) -> tuple[float, dict]:
@@ -373,11 +396,12 @@ class FinetuneTrainer:
                 ys.extend(batch["labels"].cpu().tolist())
                 ps.extend(pred.cpu().tolist())
 
-        metrics = (
-            compute_metrics(self.task_name, ys, ps)
-            if ys
-            else {"acc": 0.0}
-        )
-        score = list(metrics.values())[0] if metrics else 0.0
+        if not ys:
+            raise ValueError("Validation has no labeled examples; cannot compute research metrics")
+        metrics = compute_metrics(self.task_name, ys, ps)
+        metric_name = self._primary_name()
+        if metric_name not in metrics:
+            raise ValueError(f"Missing primary metric {metric_name}: {metrics}")
+        score = metrics[metric_name]
         logger.info("[eval-{}] {}", self.task_name, metrics)
         return float(score), metrics

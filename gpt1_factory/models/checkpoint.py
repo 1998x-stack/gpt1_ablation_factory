@@ -109,6 +109,18 @@ def load_pretrained_partial(
             )
 
     state = ckpt["model"]
+    if hasattr(model, "lstm") and not any(k.startswith("lstm.") for k in state):
+        raise ValueError("LSTM ablation requires an LSTM-pretrained checkpoint")
+    if hasattr(model, "blocks") and not any(k.startswith("blocks.") for k in state):
+        raise ValueError("Transformer ablation requires a Transformer-pretrained checkpoint")
+    if transfer_layers >= 0 and not hasattr(model, "blocks"):
+        raise ValueError("Layer-depth transfer is defined only for Transformer models")
+    if hasattr(model, "blocks") and transfer_layers > len(model.blocks):
+        raise ValueError("Transfer depth exceeds available Transformer blocks")
+    if metadata.get("model_family") and metadata["model_family"] != (
+        "lstm_baseline" if hasattr(model, "lstm") else "gpt_decoder"
+    ):
+        raise ValueError("Checkpoint model family differs from requested backbone")
     filtered = select_pretrained_state_dict(state, transfer_layers)
     prepared = _prepare_state_for_model(model, filtered)
 
