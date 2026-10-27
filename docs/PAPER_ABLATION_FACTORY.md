@@ -90,3 +90,20 @@ tensorboard --logdir runs/paper_ablations
 - Stage D：>=3 个种子的完整任务性能、paired bootstrap CI、显存/算力计量、误差分析、独立验证。
 
 **当前阶段尚未执行远程大模型训练，也不应宣称重现 Table 5 性能。**
+
+## 7. 零样本与适配可视化（新模块）
+
+`experiments/zero_shot.py` 给出平均 **答案 Token 条件对数概率** 的评分函数；
+`cli/zero_shot_race.py` 用同一固定 RACE 验证子集遍历预训练检查点，保存 `(pretrain_step, accuracy)`。
+这仅覆盖 Fig.2(right) 的 **RACE 一条曲线**；CoLA、SST-2、DPRD 的原文启发式仍需要单独实现。
+
+```bash
+python -m gpt1_factory.cli.zero_shot_race \\
+  --model-config configs/model/gpt_small.yaml \\
+  --tokenizer-artifact runs/exp_pretrain_books/tokenizer \\
+  --checkpoints runs/exp_pretrain_books/checkpoints/step_10000.pt \\
+  --limit 250 --out runs/zero_shot_race/metrics.json
+```
+
+`experiments/plots.py` 绘制按任务分开的 Table 5 比较柱状图（可显示跨种子 SD）与
+Fig.2(left) 迁移深度曲线；`dashboard.html` 提供离线筛选表。跨任务的指标不叠在同一数值坐标上。

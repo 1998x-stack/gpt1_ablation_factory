@@ -117,6 +117,7 @@ gpt1_ablation_factory/
 # 1) Install
 /usr/bin/python3 -m venv .venv && source .venv/bin/activate
 /usr/bin/python3 -m pip install -U pip
+/usr/bin/python3 -m pip install -r requirements.txt
 /usr/bin/python3 -m pip install -e .
 
 # 2) Pretrain (BooksCorpusOpen; BPE trained on-the-fly)

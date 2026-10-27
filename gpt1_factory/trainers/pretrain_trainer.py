@@ -80,6 +80,8 @@ class PretrainTrainer:
                     loss = out["loss"]
 
                 self.scaler.scale(loss).backward()
+                # Gradients must be unscaled before clipping when AMP is enabled.
+                self.scaler.unscale_(self.optim)
                 torch.nn.utils.clip_grad_norm_(
                     self.model.parameters(),
                     self.optim_cfg.grad_clip,

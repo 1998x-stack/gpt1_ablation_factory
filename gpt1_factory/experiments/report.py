@@ -84,18 +84,26 @@ def write_report(runs_dir: str | Path, out_dir: str | Path) -> dict:
                 w = csv.DictWriter(f, fieldnames=dataset[0].keys())
                 w.writeheader()
                 w.writerows(dataset)
-    dashboard = _dashboard(stats, paired)
+    from .plots import render_figures
+    figures = render_figures(stats, out / "figures")
+    dashboard = _dashboard(stats, paired, figures)
     (out / "dashboard.html").write_text(dashboard, encoding="utf-8")
     return {"completed_runs": len(rows), "groups": len(stats),
-            "dashboard": str(out / "dashboard.html")}
+            "figures": figures, "dashboard": str(out / "dashboard.html")}
 
 
-def _dashboard(stats: list[dict], paired: list[dict]) -> str:
+def _dashboard(stats: list[dict], paired: list[dict], figures: list[str]) -> str:
     """Self-contained HTML: interactive filters and SVG-free table fallback."""
     import json
     stats_json = json.dumps(stats, ensure_ascii=False, allow_nan=False)
     paired_json = json.dumps(paired, ensure_ascii=False, allow_nan=False)
-    return """<!doctype html>
+    gallery = '<h2>Task-specific figures</h2>' + ''.join(
+        '<figure><img alt="Task-specific research plot" loading="lazy" '
+        'style="max-width:100%;width:900px" src="figures/' + escape(Path(p).name) + '">'
+        '<figcaption>' + escape(Path(p).name) + '</figcaption></figure>'
+        for p in figures
+    )
+    html = """<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>GPT-1 Ablation Research Dashboard</title>
 <style>
@@ -142,3 +150,4 @@ function render(){
 }
 options('suite',stats.map(x=>x.suite));options('task',stats.map(x=>x.task));render();
 </script></html>"""
+    return html.replace("</script></html>", "</script>" + gallery + "</html>")
