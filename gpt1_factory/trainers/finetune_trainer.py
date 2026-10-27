@@ -113,7 +113,7 @@ class FinetuneTrainer:
 
     def _event(self, **event) -> None:
         with self.event_file.open('a', encoding='utf-8') as handle:
-            handle.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + '\\n')
+            handle.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + '\n')
 
     def _forward_backbone(
         self,

@@ -178,7 +178,13 @@ def load_bookcorpusopen(cfg: DataConfig, tokenizer=None) -> DatasetBundle:
             split="train",
             cache_dir=cfg.cache_dir,
         )
-    except Exception:
+    except Exception as exc:
+        if not cfg.allow_corpus_fallback:
+            raise RuntimeError(
+                "BookCorpusOpen unavailable. Research runs must not silently change corpora; "
+                "set data.allow_corpus_fallback=true only for labeled demos."
+            ) from exc
+        warnings.warn("CORPUS SUBSTITUTION: this run cannot claim BooksCorpus fidelity")
         raw = _load_books_like_split(cfg)
 
     builder = BPEBuilder(

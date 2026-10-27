@@ -133,4 +133,12 @@ class PretrainTrainer:
                 f"(effective lr={self.optim.param_groups[0]['lr']:.2e})"
             )
 
-        logger.info("Pretraining finished.")
+        # A short smoke run still needs a transferable, fingerprinted checkpoint.
+        if step:
+            save_checkpoint(
+                self.out_dir / "checkpoints/latest.pt",
+                self.model, self.optim, step, metadata=self.checkpoint_metadata,
+            )
+        self.writer.flush()
+        self.writer.close()
+        logger.info("Pretraining finished at step={}", step)
