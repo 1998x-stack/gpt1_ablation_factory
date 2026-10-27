@@ -1,0 +1,38 @@
+# RFC: paper-referenced, reproducible experiment matrix.
+schema_version: 1
+base_config: configs/finetune_glue.yaml
+default_model_config: configs/model/gpt_small.yaml
+runs_dir: runs/paper_ablations
+tokenizer_artifact: runs/exp_pretrain_books/tokenizer
+pretrained_path: runs/exp_pretrain_books/checkpoints/latest.pt
+suites:
+  - id: paper_table5
+    tasks: [cola, sst2, mrpc, stsb, qqp, mnli, qnli, rte]
+    seeds: [13, 42, 1337]
+    variants:
+      - id: full
+        aux_lm_lambda: [0.5]
+      - id: no_pretrain
+        no_pretrain: true
+        aux_lm_lambda: [0.5]
+      - id: no_aux
+        aux_lm_lambda: [0.0]
+      - id: lstm
+        model_config: configs/model/lstm_baseline.yaml
+        pretrained_path: runs/exp_pretrain_lstm/checkpoints/latest.pt
+        aux_lm_lambda: [0.5]
+
+  - id: paper_transfer
+    tasks: [mnli, qnli]
+    seeds: [13, 42, 1337]
+    variants:
+      - id: transferred_depth
+        transfer_layers: [0, 3, 6, 9, 12]
+        aux_lm_lambda: [0.5]
+
+  - id: lambda_sweep
+    tasks: [sst2, mnli, mrpc]
+    seeds: [13, 42, 1337]
+    variants:
+      - id: lm_weight
+        aux_lm_lambda: [0.0, 0.1, 0.5, 1.0]
