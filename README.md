@@ -120,7 +120,7 @@ python -m gpt1_factory.cli.ablation_factory \
   --cfg configs/ablations.yaml --execute --resume --fail-fast
 ```
 
-This requires downloading the SST-2 task data. The smoke configuration sets `data.max_len: 128` to match the mini model's context window and uses independent run directories.
+This requires downloading the SST-2 task data. The smoke configuration is defined in `configs/finetune_smoke.yaml`. It sets `data.max_len: 128` to match the mini model's context window and uses independent run directories.
 
 ## Paper-inspired experiment matrix
 
