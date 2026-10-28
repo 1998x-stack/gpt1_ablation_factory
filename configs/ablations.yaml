@@ -1,6 +1,7 @@
-# Compact local smoke matrix; use paper_ablations.yaml for full research.
+# Smoke-only: 3 SST-2 arms using the 4-layer local GPT and shared tokenizer.
+# The default command is a dry-run; --execute needs prior local pretraining.
 schema_version: 1
-base_config: configs/finetune_glue.yaml
+base_config: configs/finetune_smoke.yaml
 default_model_config: configs/model/gpt_mini.yaml
 runs_dir: runs/smoke_ablations
 tokenizer_artifact: runs/exp_local/tokenizer

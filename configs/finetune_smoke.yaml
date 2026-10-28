@@ -1,0 +1,27 @@
+# Lightweight SST-2 smoke configuration using the local 4-layer GPT.
+# The sequence length MUST fit configs/model/gpt_mini.yaml (max_len: 128).
+include:
+  - configs/model/gpt_mini.yaml
+  - configs/data/glue_sst2.yaml
+
+exp:
+  out_dir: runs/exp_finetune_smoke
+  seed: 42
+
+data:
+  max_len: 128
+  batch_size: 8
+  num_workers: 0
+  tokenizer_artifact: runs/exp_local/tokenizer
+
+finetune:
+  pretrained_path: runs/exp_local/checkpoints/latest.pt
+  aux_lm_lambda: 0.5
+  epochs: 1
+  lr: 0.0000625
+  warmup_ratio: 0.002
+  weight_decay: 0.01
+  grad_clip: 1.0
+  amp: false
+  transfer_layers: -1
+  head_dropout: 0.1

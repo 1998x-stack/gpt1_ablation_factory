@@ -1,9 +1,21 @@
+# Python / local development
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
-*.pt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+.DS_Store
+
+# Experiment artifacts, models and raw datasets
 runs/
-.superpowers/
+*.pt
+*.pth
+data/
 gpt1_ablation_factory/data/
-gpt1_ablation_factory/data/hf_cache/
-gpt1_ablation_factory/data/exports/
+.superpowers/

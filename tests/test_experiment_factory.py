@@ -21,6 +21,9 @@ def test_plan_isolated_paths_and_control_variable():
     assert all(job.config["data"]["tokenizer_artifact"] == jobs[0].config["data"]["tokenizer_artifact"] for job in jobs)
     assert len({job.config["exp"]["seed"] for job in jobs}) == 1
     assert {job.variant for job in jobs} == {"full", "no_pretrain", "no_aux"}
+    assert all(job.config["data"]["max_len"] == 128 for job in jobs)
+    assert all(job.config["model"]["max_len"] == 128 for job in jobs)
+    assert all(job.config["data"]["batch_size"] == 8 for job in jobs)
     assert run_plan(jobs, execute=False)[0]["status"] == "planned"
 
 
