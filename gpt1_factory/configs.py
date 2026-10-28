@@ -59,6 +59,7 @@ class DataConfig:
     local_text_dir: Optional[str] = None
     export_dir: Optional[str] = None
     tokenizer_artifact: Optional[str] = None
+    allow_corpus_fallback: bool = False
 
 
 @dataclass

@@ -117,6 +117,7 @@ gpt1_ablation_factory/
 # 1) Install
 /usr/bin/python3 -m venv .venv && source .venv/bin/activate
 /usr/bin/python3 -m pip install -U pip
+/usr/bin/python3 -m pip install -r requirements.txt
 /usr/bin/python3 -m pip install -e .
 
 # 2) Pretrain (BooksCorpusOpen; BPE trained on-the-fly)
@@ -176,3 +177,17 @@ bash scripts/download.sh
 /usr/bin/python3 -m gpt1_factory.cli.download --target race
 /usr/bin/python3 -m gpt1_factory.cli.download --target story_cloze
 ```
+
+## 论文驱动的实验工厂（新开发分支）
+
+在 `feat/paper-driven-ablation-factory` 分支中，研究计划可以先 dry-run，随后按需执行：
+
+```bash
+python -m gpt1_factory.cli.ablation_factory --cfg configs/paper_ablations.yaml
+# 完成对应预训练 checkpoint 和 tokenizer artifact 后才实际执行：
+python -m gpt1_factory.cli.ablation_factory --cfg configs/paper_ablations.yaml --execute --resume --fail-fast
+python -m gpt1_factory.cli.report_ablations --runs runs/paper_ablations --out runs/ablation_report
+# 浏览 runs/ablation_report/dashboard.html；训练曲线见各运行目录的 tb/
+```
+
+核心研究问题、原论文 §3–§5/Table 5/Figure 2 到代码的对应关系、消融规范、已知限制见 [docs/PAPER_ABLATION_FACTORY.md](docs/PAPER_ABLATION_FACTORY.md)。

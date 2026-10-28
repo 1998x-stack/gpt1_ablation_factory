@@ -24,6 +24,7 @@ from ..tokenization import (
 from ..trainers.finetune_trainer import FinetuneTrainer
 from ..utils.logging import setup_loguru
 from ..utils.seed import set_seed
+from ..experiments.factory import deep_merge, load_config
 
 
 def _load_yaml(path: str) -> Dict[str, Any]:
@@ -55,10 +56,7 @@ def _override_cfg(
         if value.lower() in ("true", "false"):
             parsed: Any = value.lower() == "true"
         else:
-            try:
-                parsed = float(value) if "." in value else int(value)
-            except ValueError:
-                parsed = value
+            parsed = yaml.safe_load(value)
         cur[parts[-1]] = parsed
 
     if includes_append:
@@ -100,9 +98,13 @@ def load_cfg_with_overrides(
     path: str,
     overrides: List[str],
 ) -> Dict[str, Any]:
-    cfg = _load_yaml(path)
-    cfg = _apply_includes(cfg)
-    cfg = _override_cfg(cfg, overrides)
+    cfg = load_config(path)
+    # Append extra models using deep-merge, before explicit CLI overrides.
+    for item in overrides:
+        if item.startswith("include+=") or item.startswith("include+=", 0):
+            cfg = deep_merge(cfg, load_config(item.split("=", 1)[1]))
+    cfg = _override_cfg(cfg, [item for item in overrides
+                              if not item.startswith("include+=")])
     _ensure_finetune_data_defaults(cfg)
     return cfg
 

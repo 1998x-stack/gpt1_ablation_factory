@@ -17,6 +17,7 @@ from ..configs import (
     dataclass_from_dict,
 )
 from ..data import load_dataset_factory
+from ..data.collators import LMTrainCollator
 from ..data.datasets import resolve_model_vocab_size
 from ..registry import MODELS
 from ..tokenization import TokenizerArtifact
@@ -89,11 +90,16 @@ def main():
     setup_loguru(Path(exp.out_dir) / "log.txt")
     set_seed(exp.seed)
 
-    bundle = load_dataset_factory(data_cfg)
-    artifact = TokenizerArtifact.create(
-        bundle.tokenizer,
-        Path(exp.out_dir) / "tokenizer",
-    )
+    # LSTM/Transformer comparisons must share the exact same tokenizer mapping.
+    if data_cfg.tokenizer_artifact:
+        artifact = TokenizerArtifact.load(data_cfg.tokenizer_artifact)
+        bundle = load_dataset_factory(data_cfg, tokenizer=artifact.tokenizer)
+        bundle.collator = LMTrainCollator(artifact.tokenizer, seq_len=data_cfg.seq_len or 512)
+    else:
+        bundle = load_dataset_factory(data_cfg)
+        artifact = TokenizerArtifact.create(
+            bundle.tokenizer, Path(exp.out_dir) / "tokenizer",
+        )
     logger.info(
         "[tokenizer] artifact={} fingerprint={} vocab={}",
         artifact.path,
@@ -102,7 +108,7 @@ def main():
     )
 
     model_cfg.vocab_size = resolve_model_vocab_size(
-        bundle.tokenizer,
+        artifact.tokenizer,
         model_cfg.vocab_size,
     )
     train_loader = DataLoader(
@@ -130,7 +136,8 @@ def main():
         amp=optim_cfg.amp,
         checkpoint_metadata={
             "tokenizer_fingerprint": artifact.fingerprint,
-            "tokenizer_artifact": "tokenizer/manifest.json",
+            "tokenizer_artifact": str(artifact.path),
+            "model_family": model_cfg.name,
         },
     )
     trainer.train(
