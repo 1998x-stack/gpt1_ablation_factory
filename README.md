@@ -75,8 +75,7 @@ AGENTS.md                Repository-specific guidance for coding agents
 Python **3.10+** is required. Run all commands from the **repository root**.
 
 ```bash
-git clone --branch feat/paper-driven-ablation-factory \
-  https://github.com/1998x-stack/gpt1_ablation_factory.git
+git clone https://github.com/1998x-stack/gpt1_ablation_factory.git
 cd gpt1_ablation_factory
 
 python -m venv .venv
@@ -194,4 +193,4 @@ The checkpoint path above is illustrative and must exist. The resulting accuracy
 
 Research runs should document the paper section and hypothesis, the sole manipulated factor, dataset and tokenizer identities, model/optimizer settings, random seeds, and the task-specific primary metric. Preserve baseline behavior unless there is an explicit change request. Never interpret missing metrics as zero or report synthetic results as measured evidence.
 
-For design contracts and implementation details, start with [documentation index](docs/README.md). For coding assistants and review conventions, read [AGENTS.md](AGENTS.md). The active research work is proposed in [PR #3](https://github.com/1998x-stack/gpt1_ablation_factory/pull/3) and should not be described as merged into `main`.
+For design contracts and implementation details, start with [documentation index](docs/README.md). For coding assistants and review conventions, read [AGENTS.md](AGENTS.md). The research factory and repository documentation are available on the `main` branch via [PR #3](https://github.com/1998x-stack/gpt1_ablation_factory/pull/3) and [PR #4](https://github.com/1998x-stack/gpt1_ablation_factory/pull/4). Published GPT-1 benchmark replication remains unverified.
