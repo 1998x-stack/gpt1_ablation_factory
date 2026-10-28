@@ -1,193 +1,197 @@
-# GPT1 Ablation Factory
+# GPT-1 Ablation Factory
 
-A pluggable, factory-mode project to reproduce GPT-1 style pretraining → finetuning → ablation:
-- Decoder-only Transformer (12L, 768H, 12 heads, FFN 3072) with GELU, learned pos-emb.
-- GPT-1 paper-compatible defaults: Post-LN blocks, tied token/output embeddings, no extra final LayerNorm.
-- LSTM baseline (single-layer 2048) for ablation.
-- Auxiliary LM loss during finetuning (λ=0.5) switchable.
-- Transfer layers control: load first K layers from the pretrained checkpoint for finetuning ablation.
-- Immutable tokenizer artifacts: downstream runs reuse the exact pretraining token-id mapping and validate its SHA-256 fingerprint against the checkpoint.
-- GPT-1 task protocols with `_start_`, `_delimiter_`, `_classify_`, symmetric similarity traversal, and scalar candidate scoring.
-- Input formatting for NLI / QA / Paraphrase / Classification tasks (GLUE, RACE, StoryCloze).
-- Factory registries for datasets, models, trainers; YAML-configured experiments; Loguru + TensorBoard.
+**A paper-guided, factory-mode PyTorch research workspace for generative pre-training, supervised transfer, and controlled ablation studies.**
 
-## Paper fidelity vs modern ablation
+**Reference:** Radford et al., *Improving Language Understanding by Generative Pre-Training* (2018) · [Original paper](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)
 
-The canonical `configs/model/gpt_small.yaml` follows the GPT-1 reference architecture
-more closely: Post-LayerNorm residual blocks, tied token/output embeddings, and no
-extra final LayerNorm after the last Transformer block.
+> **Research status:** The architecture, experiment factory, logging, reporting, and contract tests are implemented. The repository does **not** claim to have reproduced the paper's benchmark scores. Full-scale pre-training, exact corpus equivalence, and statistical validation remain separate research tasks.
 
-The repository's previous Pre-LN + final-LN + untied-output architecture is preserved
-as `configs/model/gpt_modern_preln.yaml` so the architectural differences can be
-measured explicitly rather than hidden inside the implementation.
+## Overview
 
-Downstream training now inherits `runs/exp_pretrain_books/tokenizer` rather than
-training a task-local BPE. The tokenizer fingerprint is stored in pretraining
-checkpoints and validated before transfer. Task inputs use explicit `_classify_`
-positions; similarity tasks run both input orders and sum their representations;
-multiple-choice candidates receive one shared scalar score each.
+The project connects three stages:
 
-See `docs/PAPER_FIDELITY.md` and `docs/TOKENIZER_TASK_PROTOCOL.md` for the current
-fidelity contract and migration notes.
+1. **Pre-train** a decoder-only Transformer with causal language modeling, preserving its tokenizer artifact and checkpoint metadata.
+2. **Transfer** pretrained weights to downstream NLI, sentence classification, sentence-pair similarity, and multiple-choice tasks.
+3. **Ablate** one research variable at a time with explicit run identity, independent outputs, and task-specific evaluation.
 
-```
-gpt1_ablation_factory/
-├─ README.md
-├─ pyproject.toml
-├─ requirements.txt
-├─ setup.cfg
-├─ configs/
-│  ├─ pretrain_books.yaml
-│  ├─ pretrain_local.yaml
-│  ├─ finetune_glue.yaml
-│  ├─ ablations.yaml
-│  ├─ model/
-│  │  ├─ gpt_mini.yaml
-│  │  ├─ gpt_small.yaml
-│  │  ├─ gpt_modern_preln.yaml
-│  │  └─ lstm_baseline.yaml
-│  └─ data/
-│     ├─ books_corpus_open.yaml
-│     ├─ books_local.yaml
-│     ├─ glue_mnli.yaml
-│     ├─ glue_sst2.yaml
-│     ├─ race.yaml
-│     └─ story_cloze.yaml
-├─ scripts/
-│  ├─ pretrain.sh
-│  ├─ pretrain_local.sh
-│  ├─ generate.sh
-│  ├─ finetune.sh
-│  ├─ download.sh
-│  └─ run_ablation.sh
-├─ gpt1_factory/
-│  ├─ __init__.py
-│  ├─ configs.py
-│  ├─ registry.py
-│  ├─ utils/
-│  │  ├─ logging.py
-│  │  ├─ seed.py
-│  │  ├─ distributed.py
-│  │  ├─ tensorboard.py
-│  │  └─ schedules.py
-│  ├─ data/
-│  │  ├─ __init__.py
-│  │  ├─ datasets.py
-│  │  ├─ collators.py
-│  │  └─ text_bpe.py
-│  ├─ tokenization/
-│  │  ├─ artifact.py
-│  │  └─ special_tokens.py
-│  ├─ models/
-│  │  ├─ __init__.py
-│  │  ├─ gpt_decoder.py
-│  │  ├─ lstm_baseline.py
-│  │  ├─ heads.py
-│  │  ├─ generation.py
-│  │  └─ checkpoint.py
-│  ├─ tasks/
-│  │  ├─ __init__.py
-│  │  ├─ formatting.py
-│  │  ├─ protocol.py
-│  │  ├─ glue_taskmap.py
-│  │  └─ metrics.py
-│  ├─ trainers/
-│  │  ├─ __init__.py
-│  │  ├─ pretrain_trainer.py
-│  │  ├─ finetune_trainer.py
-│  │  └─ zero_shot.py
-│  └─ cli/
-│     ├─ pretrain.py
-│     ├─ generate.py
-│     ├─ finetune.py
-│     ├─ download.py
-│     └─ run_ablation.py
-└─ tests/
-   ├─ paper_contract/
-   ├─ test_tokenizer.py
-   ├─ test_models.py
-   ├─ test_collators.py
-   ├─ test_generation.py
-   └─ test_local_corpus.py
+The **paper-oriented default** is 12 Transformer layers, 768 hidden dimensions, 12 attention heads, 3,072 feed-forward dimensions, learned positional embeddings, causal attention, GELU, Post-LayerNorm blocks, and tied token/output embeddings. A small 4-layer configuration is provided for local pipeline validation. A modern Pre-LN alternative and an LSTM baseline remain available for comparisons.
+
+### Capabilities and boundaries
+
+| Area | Available implementation | Important boundary |
+| --- | --- | --- |
+| Modeling | GPT decoder, mini/small profiles, modern Pre-LN comparison, LSTM | Exact historical initialization and training equivalence require further verification |
+| Pre-training | Causal LM, local-text/BookCorpusOpen loaders, checkpoint and tokenizer artifact | Alternative corpora are **not** interchangeable with original BooksCorpus |
+| Transfer | Full/partial loading, frozen tokenizer mapping, task-specific heads, auxiliary LM objective | No end-to-end published benchmark reproduction yet |
+| Task protocols | GLUE subsets, RACE and Story Cloze loaders; explicit classification tokens and symmetric similarity | Complete paper task coverage is not implemented |
+| Experiment factory | YAML suites × variants × tasks × seeds × transfer depth × LM coefficient | Plans are configurations, not already-run experiments |
+| Observability | Loguru, TensorBoard, JSONL events, checkpoint metadata, validation metrics | Dataset fingerprints, exact interrupted-run resume and full resource accounting are pending |
+| Reporting | Task-specific plots, offline HTML, CSV/JSON summaries, matched-seed differences | Bootstrap confidence intervals and full statistical inference are pending |
+| Zero-shot | Checkpoint-wise, candidate-likelihood RACE evaluation | This is a paper-inspired partial evaluation, not all Figure 2 heuristics |
+
+## Repository layout
+
+```text
+configs/
+  model/                 GPT-1, mini, modern Pre-LN, LSTM model definitions
+  data/                  Dataset and tokenization settings
+  pretrain_local.yaml    Small local training exercise
+  pretrain_books.yaml    Paper-scale Transformer pre-training entry
+  pretrain_lstm.yaml     Independently pre-trained LSTM control
+  finetune_glue.yaml     Downstream fine-tuning configuration
+  finetune_smoke.yaml    Mini-model/128-token smoke configuration
+  ablations.yaml         Three-arm smoke matrix
+  paper_ablations.yaml   162-run paper-inspired research plan
+
+gpt1_factory/
+  cli/                   Python -m command entry points
+  models/                Decoder, LSTM, heads, generation, checkpoints
+  data/                  Dataset adapters, collators, BPE builder
+  tokenization/          Tokenizer fingerprint/artifact contract
+  tasks/                 Task serialization, metrics and evaluation
+  trainers/              Pre-training, fine-tuning, zero-shot routines
+  experiments/           Validated job factory, scoring, reports and plots
+  utils/                 Logging, seeds, schedules and TensorBoard
+
+tests/
+  paper_contract/        Paper-facing invariant tests
+  test_experiment_factory.py
+  test_zero_shot_scoring.py
+  ...                    Component/integration-oriented tests
+
+docs/
+  README.md              Documentation map and project status
+  PAPER_FIDELITY.md      Architecture fidelity and known deviations
+  TOKENIZER_TASK_PROTOCOL.md
+  PAPER_ABLATION_FACTORY.md
+  superpowers/           Archived implementation plans and specifications
+
+scripts/                 Thin shell wrappers around Python CLI entry points
+AGENTS.md                Repository-specific guidance for coding agents
 ```
 
-## Quickstart
+## Installation
+
+Python **3.10+** is required. Run all commands from the **repository root**.
 
 ```bash
-# 1) Install
-/usr/bin/python3 -m venv .venv && source .venv/bin/activate
-/usr/bin/python3 -m pip install -U pip
-/usr/bin/python3 -m pip install -r requirements.txt
-/usr/bin/python3 -m pip install -e .
+git clone --branch feat/paper-driven-ablation-factory \
+  https://github.com/1998x-stack/gpt1_ablation_factory.git
+cd gpt1_ablation_factory
 
-# 2) Pretrain (BooksCorpusOpen; BPE trained on-the-fly)
-/usr/bin/python3 -m gpt1_factory.cli.pretrain --cfg configs/pretrain_books.yaml
-
-# 3) Finetune on GLUE (e.g., MNLI). This reuses the tokenizer artifact from step 2.
-/usr/bin/python3 -m gpt1_factory.cli.finetune --cfg configs/finetune_glue.yaml data.task=mnli
-
-# 4) Run ablations
-/usr/bin/python3 -m gpt1_factory.cli.run_ablation --cfg configs/ablations.yaml
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
+python -m pip install pytest
+python -m pytest -q
 ```
 
-## Local corpus quickstart (train + generate)
+This repository currently keeps its runtime library set in `requirements.txt`. Training requires PyTorch; CUDA hardware is strongly recommended for paper-scale experiments. Installing dependencies does not download training datasets.
 
-Specify a small real checkpoint without downloading any external corpus. The
-`sample_corpus.txt` file is copied into the local-text directory the trainer reads
-from, then a small model is trained against a BPE trained on that corpus, and finally
-the checkpoint generates continuation text.
+## Quick start: local mini-model
+
+The bundled `sample_corpus.txt` is a **pipeline demo**, not an official GPT-1 reproduction dataset.
 
 ```bash
-/usr/bin/python3 -m pip install -r requirements.txt   # if needed
-cp sample_corpus.txt gpt1_ablation_factory/data/text/
-/usr/bin/python3 -m gpt1_factory.cli.pretrain --cfg configs/pretrain_local.yaml
-/usr/bin/python3 -m gpt1_factory.cli.generate --bpe runs/bpe_local/bpe.json --ckpt runs/exp_local/checkpoints/latest.pt --model-yaml configs/model/gpt_mini.yaml --prompt "Once upon a time" --no-stop-on-eos --max-new-tokens 80
+# 1. Supply local training text under the configured (git-ignored) directory.
+mkdir -p gpt1_ablation_factory/data/text
+cp sample_corpus.txt gpt1_ablation_factory/data/text/sample_corpus.txt
+
+# 2. Train the 4-layer mini model and produce a checkpoint/tokenizer artifact.
+python -m gpt1_factory.cli.pretrain --cfg configs/pretrain_local.yaml
+
+# 3. Generate a continuation from the resulting checkpoint.
+python -m gpt1_factory.cli.generate \
+  --model-yaml configs/model/gpt_mini.yaml \
+  --bpe runs/bpe_local/bpe.json \
+  --ckpt runs/exp_local/checkpoints/latest.pt \
+  --prompt "Once upon a time" --max-new-tokens 64
+
+# 4. Print the three-run SST-2 smoke plan (no training).
+python -m gpt1_factory.cli.ablation_factory --cfg configs/ablations.yaml
 ```
 
-The small 4-layer model here overfits a ~100k-word corpus, so it is a demo of the
-pipeline only, not a production GPT-1.
-
-## Sample continuations
-
-Verified continuation outputs from the trained local model (prompt
-`Once upon a time there was a king who had three sons`):
-
-```
-Once upon a time there was a king who had three sons , and little is once a very the king , she was done with a beautiful little man on him
-Once upon a time there was a king who had three sons , and it , and 'It heard the wolf was once to the sun .' Then the little man and of the water
-```
-
-## Notes
-
-* Uses HuggingFace `datasets` for corpora: BookCorpusOpen / GLUE / RACE / StoryCloze.
-* BPE training via `tokenizers` (40k merges by default).
-* Checkpoints saved under `runs/exp_*/checkpoints/`.
-* TensorBoard logs under `runs/exp_*/tb/`. Loguru writes `runs/exp_*/log.txt`.
-
-### Local data cache
-
-All datasets are cached under `gpt1_ablation_factory/data/hf_cache` by default.
-You can prefetch everything:
+After the mini checkpoint and tokenizer artifact exist, execute the smoke experiments:
 
 ```bash
-bash scripts/download.sh
-# or:
-/usr/bin/python3 -m gpt1_factory.cli.download --target books
-/usr/bin/python3 -m gpt1_factory.cli.download --target glue --glue-task mnli
-/usr/bin/python3 -m gpt1_factory.cli.download --target race
-/usr/bin/python3 -m gpt1_factory.cli.download --target story_cloze
+python -m gpt1_factory.cli.ablation_factory \
+  --cfg configs/ablations.yaml --execute --resume --fail-fast
 ```
 
-## 论文驱动的实验工厂（新开发分支）
+This requires downloading the SST-2 task data. The smoke configuration sets `data.max_len: 128` to match the mini model's context window and uses independent run directories.
 
-在 `feat/paper-driven-ablation-factory` 分支中，研究计划可以先 dry-run，随后按需执行：
+## Paper-inspired experiment matrix
+
+`configs/paper_ablations.yaml` expands into **162 planned fine-tuning runs** (not 162 pretrained models).
+
+| Suite | Arms | Tasks | Seeds | Planned runs |
+| --- | --- | --- | --- | ---: |
+| `paper_table5` | Full, no pretraining, no auxiliary LM, pretrained LSTM | 8 GLUE tasks | 3 | 96 |
+| `paper_transfer` | First K transferred blocks (K = 0, 3, 6, 9, 12) | MNLI, QNLI | 3 | 30 |
+| `lambda_sweep` | Auxiliary LM weight (0, 0.1, 0.5, 1.0) | SST-2, MNLI, MRPC | 3 | 36 |
+| **Total** | | | | **162** |
+
+Run the plan without side effects:
 
 ```bash
 python -m gpt1_factory.cli.ablation_factory --cfg configs/paper_ablations.yaml
-# 完成对应预训练 checkpoint 和 tokenizer artifact 后才实际执行：
-python -m gpt1_factory.cli.ablation_factory --cfg configs/paper_ablations.yaml --execute --resume --fail-fast
-python -m gpt1_factory.cli.report_ablations --runs runs/paper_ablations --out runs/ablation_report
-# 浏览 runs/ablation_report/dashboard.html；训练曲线见各运行目录的 tb/
 ```
 
-核心研究问题、原论文 §3–§5/Table 5/Figure 2 到代码的对应关系、消融规范、已知限制见 [docs/PAPER_ABLATION_FACTORY.md](docs/PAPER_ABLATION_FACTORY.md)。
+**Before execution:** prepare the Transformer checkpoint and its tokenizer artifact, then train the LSTM using the inherited tokenizer. Paper-scale training is compute-intensive and strict BookCorpusOpen loading fails rather than silently substituting a different dataset.
+
+```bash
+python -m gpt1_factory.cli.pretrain --cfg configs/pretrain_books.yaml
+python -m gpt1_factory.cli.pretrain --cfg configs/pretrain_lstm.yaml
+
+python -m gpt1_factory.cli.ablation_factory \
+  --cfg configs/paper_ablations.yaml --execute --resume --fail-fast
+```
+
+**Caution:** The original paper's corpus, BPE details, pre-training optimization, transfer protocol, and task evaluations are not guaranteed to match this implementation. In particular, the K = 0 transfer loader also includes non-block parameters: it is not a mathematically strict "embeddings only" intervention. Record such deviations in experimental interpretations. See [paper-to-code mapping](docs/PAPER_ABLATION_FACTORY.md).
+
+## Results and visualization
+
+```bash
+# Consolidate completed experiments; no scores are fabricated for missing runs.
+python -m gpt1_factory.cli.report_ablations \
+  --runs runs/paper_ablations --out runs/ablation_report
+
+# Inspect per-step training curves.
+tensorboard --logdir runs/paper_ablations
+```
+
+Each executed run lives in `runs/paper_ablations/<unique-run-id>/`:
+
+| Artifact | Meaning |
+| --- | --- |
+| `resolved.yaml` | Fully resolved experiment configuration |
+| `provenance.json` | Run identity, config hash, paths and status |
+| `runner.log` | Captured child process output |
+| `events.jsonl` | Train/validation metrics stream |
+| `metrics.json` | Best validation epoch and primary task metric |
+| `checkpoints/best.pt` | Saved backbone and downstream heads |
+| `tb/` | TensorBoard scalar events |
+
+Reporting creates `runs/ablation_report/dashboard.html`, `summary.json`, CSV tables and per-task PNG charts. Compare results within tasks before drawing conclusions; accuracy, F1, Matthews correlation, and Pearson correlation have different semantics. The `--resume` switch skips fully completed matching runs; it does **not** restore optimizer and random state after an interrupted step.
+
+## Zero-shot checkpoint evaluation
+
+An initial RACE candidate-likelihood scorer is available:
+
+```bash
+python -m gpt1_factory.cli.zero_shot_race \
+  --model-config configs/model/gpt_small.yaml \
+  --tokenizer-artifact runs/exp_pretrain_books/tokenizer \
+  --checkpoints runs/exp_pretrain_books/checkpoints/step_10000.pt \
+  --limit 250 --out runs/zero_shot_race/metrics.json
+```
+
+The checkpoint path above is illustrative and must exist. The resulting accuracy is **not** presented as reproduction of the complete zero-shot Figure 2.
+
+## Reproducibility and contribution
+
+Research runs should document the paper section and hypothesis, the sole manipulated factor, dataset and tokenizer identities, model/optimizer settings, random seeds, and the task-specific primary metric. Preserve baseline behavior unless there is an explicit change request. Never interpret missing metrics as zero or report synthetic results as measured evidence.
+
+For design contracts and implementation details, start with [documentation index](docs/README.md). For coding assistants and review conventions, read [AGENTS.md](AGENTS.md). The active research work is proposed in [PR #3](https://github.com/1998x-stack/gpt1_ablation_factory/pull/3) and should not be described as merged into `main`.

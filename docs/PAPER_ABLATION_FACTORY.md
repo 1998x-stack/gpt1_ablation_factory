@@ -9,11 +9,11 @@ https://cdn.openai.com/research-covers/language-unsupervised/language_understand
 
 | 原论文位置 | 实验机制 | 本仓库实现 | 验收 / 状态 |
 | --- | --- | --- | --- |
-| §3.1 Eq.1–2 | 自回归 LM、学习位置 Embedding、共享输出投影 | `models/gpt_decoder.py`、`trainers/pretrain_trainer.py` | 已有单测；尚未完整规模训练 |
-| §3.2 Eq.3–5 | 分类目标 + λ 倍辅助 LM | `trainers/finetune_trainer.py` | 损失分量单独日志；λ=0/0.5 |
-| §3.3 Fig.1 | NLI 拼接；句对双顺序；选择题逐候选打分 | `tasks/protocol.py`、`data/collators.py` | 参照 `tests/paper_contract` |
-| §4.1 | 12L/768D/12H/3072，max=512，warmup=2000，cosine | `configs/model/gpt_small.yaml`、`configs/pretrain_books.yaml` | 论文配置，不意味着已复现 |
-| §4.1 | 40k BPE merges；BookCorpus 长距离连续文本 | `data/datasets.py`、`data/text_bpe.py` | 需验证合规数据的语料同一性与采样 |
+| `3.1 Eq.1–2 | 自回归 LM、学习位置 Embedding、共享输出投影 | `models/gpt_decoder.py`、`trainers/pretrain_trainer.py` | 已有单测；尚未完整规模训练 |
+| `3.2 Eq.3–5 | 分类目标 + λ 倍辅助 LM | `trainers/finetune_trainer.py` | 损失分量单独日志；λ=0/0.5 |
+| `3.3 Fig.1 | NLI 拼接；句对双顺序；选择题逐候选打分 | `tasks/protocol.py`、`data/collators.py` | 参照 `tests/paper_contract` |
+| `4.1 | 12L/768D/12H/3072，max=512，warmup=2000，cosine | `configs/model/gpt_small.yaml`、`configs/pretrain_books.yaml` | 论文配置，不意味着已复现 |
+| `4.1 | 40k BPE merges；BookCorpus 长距离连续文本 | `data/datasets.py`、`data/text_bpe.py` | 需验证合规数据的语料同一性与采样 |
 | Table 5 | w/aux、w/o pretrain、w/o aux、LSTM w/aux | `configs/paper_ablations.yaml` | 运行前分别准备 Transformer/LSTM checkpoint |
 | Fig.2(left) | 前 K 层迁移 | `transfer_layers` + report by depth | 覆盖 K=0,3,6,9,12 |
 | Fig.2(right) | 不同 LM 训练步的 zero-shot 演化 | `trainers/zero_shot.py` | **仍待构建定期 checkpoint + 评估 CLI** |
@@ -86,7 +86,7 @@ tensorboard --logdir runs/paper_ablations
 
 - Stage A（当前）：配置隔离、Table 5/transfer/λ 矩阵、指标输出、LSTM 同 token 协议、离线 HTML 报告、单元测试。
 - Stage B：独立数据 manifest（SHA-256/版本/许可/划分）、严格 BooksCorpus 协议与 token 采样审计。
-- Stage C：Figure 2 零样本能力四种启发式重建、每个 checkpoint 的关联预训练步数与分层评估。
+- Stage C：Figure 2 零样本能力四种启发式重建、每个 checkpoint 的关联预训练步数与分层评估；目前只完成 RACE 近似评分及 CLI。
 - Stage D：>=3 个种子的完整任务性能、paired bootstrap CI、显存/算力计量、误差分析、独立验证。
 
 **当前阶段尚未执行远程大模型训练，也不应宣称重现 Table 5 性能。**
