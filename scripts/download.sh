@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-set -e
-# Download everything into gpt1_ablation_factory/data/
-python -m gpt1_factory.cli.download --target all
+set -euo pipefail
+# Downloads/caches public datasets; this is not an exact BooksCorpus guarantee.
+python -m gpt1_factory.cli.download --target all "$@"

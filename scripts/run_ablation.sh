@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
-set -e
-python -m gpt1_factory.cli.run_ablation --cfg configs/ablations.yaml
+set -euo pipefail
+# Defaults to a dry-run; pass --execute to launch the smoke experiments.
+python -m gpt1_factory.cli.ablation_factory --cfg configs/ablations.yaml "$@"
