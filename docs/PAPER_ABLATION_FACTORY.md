@@ -16,7 +16,7 @@ https://cdn.openai.com/research-covers/language-unsupervised/language_understand
 | `4.1 | 40k BPE merges；BookCorpus 长距离连续文本 | `data/datasets.py`、`data/text_bpe.py` | 需验证合规数据的语料同一性与采样 |
 | Table 5 | w/aux、w/o pretrain、w/o aux、LSTM w/aux | `configs/paper_ablations.yaml` | 运行前分别准备 Transformer/LSTM checkpoint |
 | Fig.2(left) | 前 K 层迁移 | `transfer_layers` + report by depth | 覆盖 K=0,3,6,9,12 |
-| Fig.2(right) | 不同 LM 训练步的 zero-shot 演化 | `trainers/zero_shot.py` | **仍待构建定期 checkpoint + 评估 CLI** |
+| Fig.2(right) | 预训练阶段的 zero-shot 能力变化 | `experiments/zero_shot.py`、`cli/zero_shot_race.py` | RACE 部分实现；CoLA/SST-2/DPRD 的论文启发式及完整轨迹待补齐 |
 | Table 2–4 | NLI、分类、相似度、QA | `data/datasets.py` / `tasks/metrics.py` | GLUE 子集接通；QA 仍需完整基准 |
 
 ## 2. 原论文 Table 5 的数值（仅用于对照，不是本仓库结果）
@@ -67,7 +67,7 @@ python -m gpt1_factory.cli.report_ablations --runs runs/paper_ablations --out ru
 tensorboard --logdir runs/paper_ablations
 ```
 
-对于单次 smoke，可选择 `configs/ablations.yaml`。所示实验矩阵包含 162 个任务运行（不含预训练），
+对于单次 smoke，可使用 `configs/ablations.yaml`，其基础配置为 `configs/finetune_smoke.yaml`（128 token，与 mini 模型匹配）。完整实验矩阵包含 162 个任务运行（不含预训练），
 运行时间与资源远高于 smoke；预训练 checkpoint 路径必须先存在。
 
 ## 5. 公平性与识别策略
@@ -75,7 +75,7 @@ tensorboard --logdir runs/paper_ablations
 - 同一比较内固定数据集 split、Tokenizer artifact、样本过滤规则、seq_len、seed、优化步骤预算。
 - `no_pretrain` 只去掉初始化迁移，仍加载 **同一个 token-id 映射**。
 - LSTM 使用独立 LSTM 预训练，而非加载 Transformer 权重；对比时记录总参数量 / FLOPs / wall-clock。
-- Figure 2 中 `K=0` 是共享嵌入迁移；不是 “no pre-training”。
+- Figure 2 中 `K=0` 与随机初始化不同。**目前代码 K=0 仍转移非 Transformer block 权重，不能严格称为 embedding-only。** 必须先修正权重过滤契约才能作同义比较。
 - 内部只使用验证集选模型，官方 test 标签不可泄露入调参过程。
 - `qnli` 和 `rte` 需要正确的成对输入字段；MRPC / QQP 的主指标为 F1、STS-B 为 Pearson。
 - 原论文的实际 tokenizer 与原始 BooksCorpus 数据可能受可用性和许可限制。替代数据结果只可标为 conceptual reproduction。
@@ -86,7 +86,7 @@ tensorboard --logdir runs/paper_ablations
 
 - Stage A（当前）：配置隔离、Table 5/transfer/λ 矩阵、指标输出、LSTM 同 token 协议、离线 HTML 报告、单元测试。
 - Stage B：独立数据 manifest（SHA-256/版本/许可/划分）、严格 BooksCorpus 协议与 token 采样审计。
-- Stage C：Figure 2 零样本能力四种启发式重建、每个 checkpoint 的关联预训练步数与分层评估；目前只完成 RACE 近似评分及 CLI。
+- Stage C：Figure 2 全部零样本启发式与逐 checkpoint 轨迹；当前仅完成 RACE 候选答案概率评分和评估 CLI。
 - Stage D：>=3 个种子的完整任务性能、paired bootstrap CI、显存/算力计量、误差分析、独立验证。
 
 **当前阶段尚未执行远程大模型训练，也不应宣称重现 Table 5 性能。**
@@ -98,10 +98,10 @@ tensorboard --logdir runs/paper_ablations
 这仅覆盖 Fig.2(right) 的 **RACE 一条曲线**；CoLA、SST-2、DPRD 的原文启发式仍需要单独实现。
 
 ```bash
-python -m gpt1_factory.cli.zero_shot_race \\
-  --model-config configs/model/gpt_small.yaml \\
-  --tokenizer-artifact runs/exp_pretrain_books/tokenizer \\
-  --checkpoints runs/exp_pretrain_books/checkpoints/step_10000.pt \\
+python -m gpt1_factory.cli.zero_shot_race \
+  --model-config configs/model/gpt_small.yaml \
+  --tokenizer-artifact runs/exp_pretrain_books/tokenizer \
+  --checkpoints runs/exp_pretrain_books/checkpoints/step_10000.pt \
   --limit 250 --out runs/zero_shot_race/metrics.json
 ```
 
