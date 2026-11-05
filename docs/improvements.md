@@ -12,5 +12,5 @@
 - Security & regression review: No secrets, external requests, permission changes, CI workflows, training data, model weights, or deployment changes. Normal nonempty prompts unchanged; potential compatibility change for callers relying on the prior empty-prompt IndexError.
 - Risk & rollback: Low risk input validation; revert this branch's source and test commits if tokenizer-specific behavior is incompatible. Full pytest and CLI smoke test remain required before merge.
 - Follow-up: Run full tests/test_generation.py with real tokenizers and a CLI smoke test on an empty prompt, then examine temperature NaN/zero handling as a separate issue.
-- Commit: pending
-- PR: pending
+- Commit: 14f8c8654f515741489963cab4c4a4b26fc0f532 (tests); 1ba597da0dcecf26b7acecb4fc4bca54b844ad70 (source); e91185e01e2403dd709f0422ff5cb5026a2d7bd8 (initial history)
+- PR: https://github.com/1998x-stack/gpt1_ablation_factory/pull/5
