@@ -75,6 +75,8 @@ def generate_model(
         stop_ids = [eos_id] if eos_id is not None else []
 
     ids = tokenizer.encode(prompt, add_special_tokens=False).ids
+    if not ids and int(max_new_tokens) > 0:
+        raise ValueError("Prompt must encode to at least one token when generating new tokens.")
     input_ids = torch.tensor([ids], dtype=torch.long, device=device)
 
     for _ in range(int(max_new_tokens)):

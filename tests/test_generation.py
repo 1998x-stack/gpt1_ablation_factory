@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import torch
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
@@ -85,3 +86,17 @@ def test_empty_stop_ids_disables_eos_stop() -> None:
     # max_new_tokens-th) hasn't been fed through by the time generation ends.
     assert stop_default.longest < no_stop.longest
     assert no_stop.longest >= prompt_len + 8 - 1
+
+
+def test_empty_prompt_reports_actionable_error() -> None:
+    tok = _tiny_tokenizer()
+    model = _AlwaysEosModel(tok.token_to_id("</s>"), tok.get_vocab_size() + 20)
+    with pytest.raises(ValueError, match="Prompt must encode to at least one token"):
+        generate_model(model, tok, "", max_new_tokens=1, device="cpu")
+
+
+def test_empty_prompt_without_generation_is_allowed() -> None:
+    tok = _tiny_tokenizer()
+    model = _AlwaysEosModel(tok.token_to_id("</s>"), tok.get_vocab_size() + 20)
+    assert generate_model(model, tok, "", max_new_tokens=0, device="cpu") == ""
+    assert model.longest == 0
